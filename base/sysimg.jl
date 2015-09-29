@@ -291,11 +291,11 @@ using .Docs
 using .Markdown
 
 # deprecated functions
-#include("deprecated.jl")
+include("deprecated.jl")
 
 # Some basic documentation
-#include("docs/helpdb.jl")
-#include("docs/basedocs.jl")
+include("docs/helpdb.jl")
+include("docs/basedocs.jl")
 
 # threads
 include("threads.jl")
@@ -312,7 +312,7 @@ function __init__()
 end
 
 include = include_from_node1
-#include("precompile.jl")
+include("precompile.jl")
 
 end # baremodule Base
 

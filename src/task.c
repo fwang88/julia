@@ -243,7 +243,7 @@ static void NOINLINE JL_NORETURN start_task(void)
     }
     else {
         JL_TRY {
-            res = jl_apply(t->start, NULL, 0);
+            res = jl_do_call(t->start, NULL, 0);
         }
         JL_CATCH {
             res = jl_exception_in_transit;
