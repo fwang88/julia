@@ -909,12 +909,20 @@ function abstract_call(f::ANY, fargs, argtypes::Vector{Any}, vtypes, sv::StaticV
     t !== false && return t
     if is(f,_apply) && length(fargs)>0
         af = isconstantfunc(fargs[1], sv)
-        if !is(af,false)
+        if af === false
+            aft = argtypes[1]
+            if isType(aft) && !isa(aft.parameters[1],TypeVar)
+                af = aft.parameters[1]
+            elseif isleaftype(aft) && isdefined(aft,:instance)
+                af = aft.instance
+            else
+                # TODO jb/functions: take advantage of case where non-constant `af`'s type is known
+                return Any
+            end
+        else
             af = _ieval(af)
-            return abstract_apply(af, fargs[2:end], argtypes[2:end], vtypes, sv, e)
         end
-        # TODO jb/functions: take advantage of case where non-constant `af`'s type is known
-        return Any
+        return abstract_apply(af, fargs[2:end], argtypes[2:end], vtypes, sv, e)
     end
     for i=1:(length(argtypes)-1)
         if isvarargtype(argtypes[i])
@@ -936,6 +944,15 @@ function abstract_call(f::ANY, fargs, argtypes::Vector{Any}, vtypes, sv::StaticV
         if !is(val,false)
             return abstract_eval_constant(_ieval(val))
         end
+    end
+    if is(f,Core.kwfunc) && length(fargs)==1
+        ft = argtypes[1]
+        if isa(ft,DataType) && !ft.abstract
+            if isdefined(ft.name.mt, :kwsorter)
+                return typeof(ft.name.mt.kwsorter)
+            end
+        end
+        return Any
     end
     if isa(f,Builtin) || isa(f,IntrinsicFunction)
         rt = builtin_tfunction(f, fargs, Tuple{argtypes...})

@@ -3465,7 +3465,7 @@ end
 
 # issue 13855
 @eval @noinline function foo13855(x)
-    $(Expr(:localize, :(() -> () -> x)))
+    $(Expr(:localize, :(() -> x)))
 end
 @test foo13855(Base.AddFun())() == Base.AddFun()
 @test foo13855(Base.MulFun())() == Base.MulFun()

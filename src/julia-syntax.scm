@@ -988,11 +988,14 @@
                                     (= ,vname ,(caddar binds))
                                     ,blk))))))
                     ((and (pair? (cadar binds))
-                          (symbol? (cadr (cadar binds)))
                           (eq? (caadar binds) 'call))
                      ;; f()=c
-                     (let ((asgn (butlast (julia-expand0 (car binds))))
-                           (name (cadr (cadar binds))))
+                     (let* ((asgn (butlast (julia-expand0 (car binds))))
+                            (name (cadr (cadar binds)))
+                            (name (cond ((symbol? name) name)
+                                        ((and (pair? name) (eq? (car name) 'curly))
+                                         (cadr name))
+                                        (else (error "invalid let syntax")))))
                        (loop (cdr binds)
                              `(scope-block
                                (block
@@ -2707,8 +2710,7 @@ So far only the second case can actually occur.
                `(call (top typeassert) ,(cadr e) ,(caddr e)))))
         ((lambda)
 	 (analyze-vars-lambda e env captvars sp '()))
-	;; TODO hopefully remove this
-        #;((localize)
+        ((localize)
          ;; special feature for @spawn that wraps a piece of code in a "let"
          ;; binding each free variable.
          (let ((env-vars (map vinfo:name env))
@@ -2717,10 +2719,8 @@ So far only the second case can actually occur.
                       (lambda (v) (or (memq v localize-vars)
                                       (memq v env-vars)))
                       (free-vars (cadr e)))))
-             (analyze-vars
-              `(call (lambda ,vs ,(caddr (cadr e)) ,(cadddr (cadr e)))
-                     ,@vs)
-              env captvars sp))))
+             ;; TODO jb/functions
+             (analyze-vars (cadr e) env captvars sp))))
 	((with-static-parameters)
 	 ;; (with-static-parameters func_expr sp_1 sp_2 ...)
 	 (assert (eq? (car (cadr e)) 'lambda))
