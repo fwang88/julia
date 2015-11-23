@@ -501,7 +501,7 @@ jl_methtable_t *jl_new_method_table(jl_sym_t *name, jl_module_t *module)
     return mt;
 }
 
-jl_typename_t *jl_new_typename_in(jl_sym_t *name, jl_module_t *module)
+DLLEXPORT jl_typename_t *jl_new_typename_in(jl_sym_t *name, jl_module_t *module)
 {
     jl_typename_t *tn=(jl_typename_t*)newobj((jl_value_t*)jl_typename_type, NWORDS(sizeof(jl_typename_t)));
     tn->name = name;
