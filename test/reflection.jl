@@ -183,18 +183,16 @@ let
     @test Set(names(TestMod7648))==Set([:TestMod7648, :a9475, :c7648, :foo7648])
     @test isconst(TestMod7648, :c7648)
     @test !isconst(TestMod7648, :d7648)
-    @test !isgeneric(isa)
 end
 
 let
     using TestMod7648
     @test Base.binding_module(:a9475)==TestMod7648.TestModSub9475
     @test Base.binding_module(:c7648)==TestMod7648
-    @test isgeneric(foo7648)
     @test Base.function_name(foo7648)==:foo7648
     @test Base.function_module(foo7648, (Any,))==TestMod7648
     @test basename(functionloc(foo7648, (Any,))[1]) == "reflection.jl"
-    @test TestMod7648.TestModSub9475.foo7648.env.defs==@which foo7648(5)
+    @test methods(TestMod7648.TestModSub9475.foo7648).defs==@which foo7648(5)
     @test TestMod7648==@which foo7648
     @test TestMod7648.TestModSub9475==@which a9475
 end

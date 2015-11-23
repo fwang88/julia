@@ -2993,7 +2993,7 @@ end
 
 # issue #8283
 function func8283 end
-@test isa(func8283,Function) && isgeneric(func8283)
+@test isa(func8283,Function)
 @test_throws MethodError func8283()
 
 # issue #11243
@@ -3571,3 +3571,7 @@ function __f_isa_arg_1()
     length(a)
 end
 @test __f_isa_arg_1() == 1
+
+# issue #10985
+f10985(::Any...) = 1
+@test f10985(1, 2, 3) == 1

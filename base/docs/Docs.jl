@@ -134,14 +134,8 @@ end
 function functionsummary(func::Function)
     io  = IOBuffer()
     write(io, "```julia\n")
-    if isgeneric(func)
-        print(io, methods(func))
-    else
-        if isdefined(func,:code) && func.code !== nothing
-            write_lambda_signature(io, func.code)
-            write(io, " -> ...")
-        end
-    end
+    print(io, methods(func))
+    # TODO jb/functions better summary for closures?
     write(io, "\n```")
     return Markdown.parse(takebuf_string(io))
 end
@@ -162,7 +156,7 @@ function doc(b::Binding)
                 d = catdoc(Markdown.parse("""
                 No documentation found.
 
-                `$(b.mod === Main ? b.var : join((b.mod, b.var),'.'))` is $(isgeneric(v) ? "a generic" : "an anonymous") `Function`.
+                `$(b.mod === Main ? b.var : join((b.mod, b.var),'.'))` is a `Function`.
                 """), functionsummary(v))
             elseif isa(v,DataType)
                 d = catdoc(Markdown.parse("""
@@ -298,7 +292,7 @@ function doc!(T::DataType, sig::ANY, data, source)
 end
 
 function doc(obj::Base.Callable, sig::Type = Union)
-    isgeneric(obj) && sig !== Union && isempty(methods(obj, sig)) && return nothing
+    sig !== Union && isempty(methods(obj, sig)) && return nothing
     results, groups = [], []
     for m in modules
         if haskey(meta(m), obj)

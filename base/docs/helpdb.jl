@@ -6592,13 +6592,6 @@ Prints the native assembly instructions generated for running the method matchin
 code_native
 
 doc"""
-    isgeneric(f::Function) -> Bool
-
-Determine whether a `Function` is generic.
-"""
-isgeneric
-
-doc"""
     symdiff(s1,s2...)
 
 Construct the symmetric difference of elements in the passed in sets or arrays. Maintains order with arrays.

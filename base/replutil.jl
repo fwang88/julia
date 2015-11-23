@@ -188,7 +188,7 @@ function showerror(io::IO, ex::MethodError)
     # Check for local functions that shadow methods in Base
     if isdefined(Base, name)
         basef = eval(Base, name)
-        if basef !== ex.f && isgeneric(basef) && method_exists(basef, arg_types)
+        if basef !== ex.f && method_exists(basef, arg_types)
             println(io)
             print(io, "you may have intended to import Base.$(name)")
         end

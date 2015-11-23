@@ -114,8 +114,6 @@ subtypes(m::Module, x::DataType) = sort(collect(_subtypes(m, x)), by=string)
 subtypes(x::DataType) = subtypes(Main, x)
 
 # function reflection
-isgeneric(f::ANY) = true  # TODO jb/functions deprecate?
-
 function_name(f::Function) = typeof(f).name.mt.name
 
 function to_tuple_type(t::ANY)

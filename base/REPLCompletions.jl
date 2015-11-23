@@ -319,7 +319,7 @@ end
 function complete_methods(ex_org::Expr)
     args_ex = DataType[]
     func, found = get_value(ex_org.args[1], Main)
-    (!found || (found && !isgeneric(func))) && return UTF8String[]
+    !found && return UTF8String[]
     for ex in ex_org.args[2:end]
         val, found = get_type(ex, Main)
         push!(args_ex, val)
