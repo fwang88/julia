@@ -1491,13 +1491,22 @@ JL_DLLEXPORT size_t jl_static_show(JL_STREAM *out, jl_value_t *v)
 
 JL_DLLEXPORT size_t jl_static_show_func_sig(JL_STREAM *s, jl_value_t *type)
 {
-    if (!jl_is_tuple_type(type))
+    jl_value_t *ftype = jl_first_argument_datatype(type);
+    if (ftype == NULL)
         return jl_static_show(s, type);
     size_t n = 0;
+    if (jl_nparams(ftype)==0 || ftype == ((jl_datatype_t*)ftype)->name->primary) {
+        n += jl_printf(s, "%s", jl_symbol_name(((jl_datatype_t*)ftype)->name->name));
+    }
+    else {
+        n += jl_printf(s, "(::");
+        n += jl_static_show(s, ftype);
+        n += jl_printf(s, ")");
+    }
     size_t tl = jl_nparams(type);
     n += jl_printf(s, "(");
     size_t i;
-    for (i = 0;i < tl;i++) {
+    for (i = 1; i < tl; i++) {
         jl_value_t *tp = jl_tparam(type, i);
         if (i != tl - 1) {
             n += jl_static_show(s, tp);

@@ -2751,28 +2751,38 @@ So far only the second case can actually occur.
 (define (analyze-variables e) (analyze-vars e '() '() '()))
 
 #|
-7. Figure out how to pass in static parameters in --compile=no mode.
+ 1. Figure out how to pass in static parameters in --compile=no mode, fix --compile=all.
 
-8. improve typing of closure fields; remove Box for single-assigned vars;
-   specialized Box{T} for mutable bindings with declared types
+ 2. repair precompilation
 
-9. propagate static parameters into closure types, so e.g. closure method
-signatures can depend on them.
+ 3. Figure out closure serialization. maybe only fully serialize types from
+ Main.__hidden__
 
-10. too many gensyms; maybe move generated toplevel definitions to
-a __hidden__ submodule. moreover, references in __hidden__ can be consideered
-weak. if __hidden__ has the only reference to a type, it can be removed.
+ 4. Staged functions containing closures are probably not lowered correctly
+ (jl_instantiate_staged).
 
-11. Decide how to handle local generic functions with multiple methods
-    . all methods needs to be added in the same basic block
+ 5. too many gensyms; maybe move generated toplevel definitions to
+ a __hidden__ submodule. moreover, references in __hidden__ can be consideered
+ weak. if __hidden__ has the only reference to a type, it can be removed.
 
-12. Good error messages for trying to add a method from the wrong scope, etc.
 
-13. Figure out closure serialization. maybe only fully serialize types from
-Main.__hidden__
+ 6. nice deprecation for `call` overloading
 
-14. Staged functions containing closures are probably not lowered correctly
-    (jl_instantiate_staged).
+ 7. reduce amount of specialization on closure types somehow
+
+ 8. improve typing of closure fields; remove Box for single-assigned vars;
+ specialized Box{T} for mutable bindings with declared types. remove redundant Boxes.
+
+ 9. propagate static parameters into closure types, so e.g. closure method
+ signatures can depend on them.
+
+ 10. decide if/how to present extra function argument when printing things
+
+ 11. better ctor syntax
+
+ 12. handle local method definitions inside `if` blocks, etc.
+
+ 13. don't allocate MethodTable for abstract types
 |#
 
 (define (clear-capture-bits vinfos)

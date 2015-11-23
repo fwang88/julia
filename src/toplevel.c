@@ -734,6 +734,46 @@ JL_DLLEXPORT jl_value_t *jl_generic_function_def(jl_sym_t *name, jl_value_t **bp
     return gf;
 }
 
+jl_datatype_t *first_arg_datatype(jl_value_t *a, int got_tuple1)
+{
+    if (jl_is_datatype(a)) {
+        if (got_tuple1)
+            return (jl_datatype_t*)a;
+        if (jl_is_tuple_type(a)) {
+            if (jl_nparams(a) < 1)
+                return NULL;
+            return first_arg_datatype(jl_tparam0(a), 1);
+        }
+        return NULL;
+    }
+    else if (jl_is_typevar(a)) {
+        return first_arg_datatype(((jl_tvar_t*)a)->ub, got_tuple1);
+    }
+    else if (jl_is_typector(a)) {
+        return first_arg_datatype(((jl_typector_t*)a)->body, got_tuple1);
+    }
+    else if (jl_is_uniontype(a)) {
+        jl_svec_t *ts = ((jl_uniontype_t*)a)->types;
+        if (jl_svec_len(ts) == 0) return NULL;
+        jl_datatype_t *dt = first_arg_datatype(jl_svecref(ts,0), got_tuple1);
+        if (dt == NULL) return NULL;
+        int i;
+        for(i=1; i < jl_svec_len(ts); i++) {
+            jl_datatype_t *ti = first_arg_datatype(jl_svecref(ts,i), got_tuple1);
+            if (ti==NULL || ti->name != dt->name)
+                return NULL;
+        }
+        return dt;
+    }
+    return NULL;
+}
+
+// get DataType of first tuple element, or NULL if cannot be determined
+jl_value_t *jl_first_argument_datatype(jl_value_t *argtypes)
+{
+    return (jl_value_t*)first_arg_datatype(argtypes, 0);
+}
+
 DLLEXPORT void jl_method_def(jl_svec_t *argdata, jl_lambda_info_t *f, jl_value_t *isstaged)
 {
     // argdata is svec({types...}, svec(typevars...))
@@ -757,7 +797,7 @@ DLLEXPORT void jl_method_def(jl_svec_t *argdata, jl_lambda_info_t *f, jl_value_t
     assert(jl_is_svec(tvars));
     assert(jl_nparams(argtypes)>0);
 
-    jl_value_t *ftype = jl_tparam0(argtypes);
+    jl_value_t *ftype = jl_first_argument_datatype((jl_value_t*)argtypes);
     if (!(jl_is_type_type(ftype) ||
           (jl_is_datatype(ftype) && (!((jl_datatype_t*)ftype)->abstract ||
                                      jl_is_leaf_type(ftype)))))

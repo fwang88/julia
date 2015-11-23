@@ -374,7 +374,7 @@ void jl_type_infer(jl_lambda_info_t *li, jl_tupletype_t *argtypes, jl_lambda_inf
         fargs[2] = (jl_value_t*)jl_emptysvec;
         fargs[3] = (jl_value_t*)def;
 #ifdef TRACE_INFERENCE
-        jl_printf(JL_STDERR,"inference on %s", jl_symbol_name(li->name));
+        jl_printf(JL_STDERR,"inference on ");
         jl_static_show_func_sig(JL_STDERR, (jl_value_t*)argtypes);
         jl_printf(JL_STDERR, "\n");
 #endif
@@ -743,7 +743,7 @@ static jl_lambda_info_t *cache_method(jl_methtable_t *mt, jl_tupletype_t *type,
         if (0/*TODO jb/functions*/ && jl_options.compile_enabled == JL_OPTIONS_COMPILE_OFF) {
             /*
             if (method->linfo->unspecialized == NULL) {
-                jl_printf(JL_STDERR,"code missing for %s", method->linfo->name->name);
+                jl_printf(JL_STDERR,"code missing for ");
                 jl_static_show_func_sig(JL_STDERR, (jl_value_t*)type);
                 jl_printf(JL_STDERR, "  sysimg may not have been built with --compile=all\n");
                 exit(1);
@@ -1098,22 +1098,20 @@ static void check_ambiguous(jl_methlist_t *ml, jl_tupletype_t *type,
             return;
         }
         jl_methlist_t *l = ml;
-        char *n;
         JL_STREAM *s;
         while (l != (void*)jl_nothing) {
             if (sigs_eq(isect, (jl_value_t*)l->sig, 0))
                 goto done_chk_amb;  // ok, intersection is covered
             l = l->next;
         }
-        n = jl_symbol_name(fname);
         s = JL_STDERR;
-        jl_printf(s, "WARNING: New definition \n    %s", n);
+        jl_printf(s, "WARNING: New definition \n    ");
         jl_static_show_func_sig(s, (jl_value_t*)type);
         print_func_loc(s, linfo);
-        jl_printf(s, "\nis ambiguous with: \n    %s", n);
+        jl_printf(s, "\nis ambiguous with: \n    ");
         jl_static_show_func_sig(s, (jl_value_t*)sig);
         print_func_loc(s, oldmeth->func);
-        jl_printf(s, ".\nTo fix, define \n    %s", n);
+        jl_printf(s, ".\nTo fix, define \n    ");
         jl_static_show_func_sig(s, isect);
         jl_printf(s, "\nbefore the new definition.\n");
     done_chk_amb:
@@ -1150,8 +1148,7 @@ jl_methlist_t *jl_method_list_insert(jl_methlist_t **pml, jl_tupletype_t *type,
                 (l->func->module != method->module)) {
                 jl_module_t *newmod = method->module;
                 JL_STREAM *s = JL_STDERR;
-                jl_printf(s, "WARNING: Method definition %s",
-                          jl_symbol_name(method->name));
+                jl_printf(s, "WARNING: Method definition ");
                 jl_static_show_func_sig(s, (jl_value_t*)type);
                 jl_printf(s, " in module %s",
                           jl_symbol_name(l->func->module->name));
