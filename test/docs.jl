@@ -557,7 +557,7 @@ let d = @doc Undocumented.f
     @test startswith(takebuf_string(io),"""
     No documentation found.
 
-    `Undocumented.f` is an anonymous `Function`.
+    `Undocumented.f` is a `Function`.
     """)
 end
 
@@ -567,7 +567,7 @@ let d = @doc Undocumented.undocumented
     @test startswith(takebuf_string(io), """
     No documentation found.
 
-    `Undocumented.undocumented` is a generic `Function`.
+    `Undocumented.undocumented` is a `Function`.
     """)
 end
 

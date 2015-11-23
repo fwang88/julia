@@ -104,7 +104,12 @@ function write_lambda_signature(io::IO, lam::LambdaStaticData)
     write(io, '(')
     nargs = length(ex.args[1])
     for (i,arg) in enumerate(ex.args[1])
-        argname, argtype = arg.args
+        i==1 && continue
+        if isa(arg,Expr)
+            argname, argtype = arg.args
+        else
+            argname, argtype = arg, :Any
+        end
         if argtype === :Any || argtype === :ANY
             write(io, argname)
         elseif isa(argtype,Expr) && argtype.head === :... &&
@@ -119,14 +124,11 @@ function write_lambda_signature(io::IO, lam::LambdaStaticData)
     return io
 end
 
-function macrosummary(name::Symbol, func::Function)
-    if !isdefined(func,:code) || func.code == nothing
-        return Markdown.parse("\n")
-    end
+function macrosummary(name::Symbol, func::LambdaStaticData)
     io  = IOBuffer()
     write(io, "```julia\n")
     write(io, name)
-    write_lambda_signature(io, func.code)
+    write_lambda_signature(io, func)
     write(io, "\n```")
     return Markdown.parse(takebuf_string(io))
 end

@@ -2914,7 +2914,7 @@ So far only the second case can actually occur.
        ((atom? e) e)
        (else
 	(case (car e)
-	  ((quote inert) e)
+	  ((quote top line break inert) e)
 	  ((=)
 	   (let ((var (cadr e))
 		 (rhs (cl-convert (caddr e) fname lam namemap toplevel interp)))
