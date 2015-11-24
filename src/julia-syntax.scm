@@ -2783,9 +2783,11 @@ other:
 - methods(ASCIIString) shows entire Type methods list; should restrict to ASCIIString
 |#
 
+(define (vinfo:not-capt vi)
+  (list (car vi) (cadr vi) (logand (caddr vi) (lognot 5))))
+
 (define (clear-capture-bits vinfos)
-  (map (lambda (vi) (list (car vi) (cadr vi) (logand (caddr vi) (lognot 5))))
-       vinfos))
+  (map vinfo:not-capt vinfos))
 
 (define (convert-lambda lam fname tname interp)
   `(lambda ,(lam:args lam)
@@ -2815,7 +2817,7 @@ other:
 					   vt
 					   (cl-convert vt fname lam #f #f interp)))))
       (cond
-       ((and cv (vinfo:asgn cv))
+       ((and cv (vinfo:asgn cv) (vinfo:capt cv))
 	`(call (top setfield!)
                ,(if interp
                     `($ ,var)
@@ -2874,6 +2876,27 @@ other:
 		    args))
       ,@(list-tail body (+ 1 (length lnos))))))
 
+;; clear capture bit for vars assigned once at the top
+(define (lambda-optimize-vars! lam)
+  (assert (eq? (car lam) 'lambda))
+  (let ((vi (car (lam:vinfo lam))))
+    (if (and (any vinfo:capt vi)
+	     (any vinfo:sa vi))
+	(let ((leading
+	       (map cadr
+		    (filter assignment?
+			    (take-while (lambda (e)
+					  (or (atom? e)
+					      (memq (car e) '(quote top line inert local
+								    implicit-global global
+								    const newvar = null method))))
+					(lam:body lam))))))
+	  (for-each (lambda (v)
+		      (if (and (vinfo:sa v) (memq (car v) leading))
+			  (set-car! (cddr v) (logand (caddr v) (lognot 5)))))
+		    vi)))
+    lam))
+
 (define (closure-convert e) (cl-convert e #f #f #f #f #f))
 
 (define (map-cl-convert exprs fname lam namemap toplevel interp)
@@ -2901,7 +2924,7 @@ other:
 		 (let ((access (if interp
                                    `($ (call (top QuoteNode) ,e))
                                    `(call (top getfield) ,fname (inert ,e)))))
-		   (if (vinfo:asgn cv)
+		   (if (and (vinfo:asgn cv) (vinfo:capt cv))
 		       `(call (top getfield) ,access (inert contents))
 		       access)))
 		(vi
@@ -2924,7 +2947,11 @@ other:
 		 e)))
 	  ((local)
 	   (let ((vi (assq (cadr e) (car (lam:vinfo lam)))))
-	     (if (and vi (vinfo:asgn vi) (vinfo:capt vi))
+	     (if (and vi (vinfo:asgn vi) (vinfo:capt vi)
+		      ;; avoid redundant box for vars with newvar nodes
+		      (not (any (lambda (x) (and (length= x 2)
+						 (eq? (car x) 'newvar) (eq? (cadr x) (cadr e))))
+				(lam:body lam))))
 		 `(= ,(cadr e) (call (top Box)))
 		 `(newvar ,(cadr e)))))
 	  ((const)
@@ -3047,7 +3074,9 @@ other:
 	      (,(clear-capture-bits (car (lam:vinfo e)))
 	       () ,@(cddr (lam:vinfo e)))
 	      (block
-	       ,@(map-cl-convert (cdr (lam:body e)) 'anon e (table) #t interp))))
+	       ,@(map-cl-convert (cdr (lam:body e)) 'anon
+				 (lambda-optimize-vars! e)
+				 (table) #t interp))))
 	  (else (cons (car e)
 		      (map-cl-convert (cdr e) fname lam namemap toplevel interp))))))))
 

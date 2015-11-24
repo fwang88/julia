@@ -208,6 +208,7 @@
 (define (vinfo:capt v) (< 0 (logand (caddr v) 1)))
 (define (vinfo:asgn v) (< 0 (logand (caddr v) 2)))
 (define (vinfo:const v) (< 0 (logand (caddr v) 8)))
+(define (vinfo:sa v) (< 0 (logand (caddr v) 16)))
 (define (set-bit x b val) (if val (logior x b) (logand x (lognot b))))
 ;; record whether var is captured
 (define (vinfo:set-capt! v c)  (set-car! (cddr v) (set-bit (caddr v) 1 c)))
