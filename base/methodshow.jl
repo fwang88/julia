@@ -42,13 +42,21 @@ function arg_decl_parts(m::Method)
 end
 
 function show(io::IO, m::Method)
-    print(io, m.func.name)
     tv, decls, file, line = arg_decl_parts(m)
+    ft = m.sig.parameters[1]
+    d1 = decls[1]
+    if isa(ft,DataType) && (isempty(ft.parameters) && nfields(ft)==0 &&
+                            isdefined(ft.name.module,ft.name.name) &&
+                            ft == typeof(getfield(ft.name.module,ft.name.name)))
+        print(io, ft.name.name)
+    else
+        print(io, "(", d1[1], "::", d1[2], ")")
+    end
     if !isempty(tv)
         show_delim_array(io, tv, '{', ',', '}', false)
     end
     print(io, "(")
-    print_joined(io, [isempty(d[2]) ? d[1] : d[1]*"::"*d[2] for d in decls],
+    print_joined(io, [isempty(d[2]) ? d[1] : d[1]*"::"*d[2] for d in decls[2:end]],
                  ", ", ", ")
     print(io, ")")
     if line > 0

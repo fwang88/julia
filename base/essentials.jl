@@ -24,6 +24,10 @@ const call = (f,args...)->f(args...)
 call{T}(::Type{T}, arg) = convert(T, arg)::T
 call{T}(::Type{T}, args...) = convert(T, args...)::T
 
+# `convert` fallbacks for constructors defined in boot.jl
+(T::Type{ASCIIString})(args...) = convert(T, args...)
+(T::Type{UTF8String})(args...) = convert(T, args...)
+
 convert{T}(::Type{T}, x::T) = x
 
 convert(::Type{Tuple{}}, ::Tuple{}) = ()

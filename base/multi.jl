@@ -1449,26 +1449,26 @@ spawnat(p, thunk) = sync_add(remotecall(thunk, p))
 spawn_somewhere(thunk) = spawnat(chooseproc(thunk),thunk)
 
 macro spawn(expr)
-    expr = localize_vars(:(()->($expr)), false)
-    :(spawn_somewhere($(esc(expr))))
+    expr = localize_vars(esc(:(()->($expr))), false)
+    :(spawn_somewhere($expr))
 end
 
 macro spawnat(p, expr)
-    expr = localize_vars(:(()->($expr)), false)
-    :(spawnat($(esc(p)), $(esc(expr))))
+    expr = localize_vars(esc(:(()->($expr))), false)
+    :(spawnat($(esc(p)), $expr))
 end
 
 macro fetch(expr)
-    expr = localize_vars(:(()->($expr)), false)
+    expr = localize_vars(esc(:(()->($expr))), false)
     quote
-        thunk = $(esc(expr))
+        thunk = $expr
         remotecall_fetch(thunk, chooseproc(thunk))
     end
 end
 
 macro fetchfrom(p, expr)
-    expr = localize_vars(:(()->($expr)), false)
-    :(remotecall_fetch($(esc(expr)), $(esc(p))))
+    expr = localize_vars(esc(:(()->($expr))), false)
+    :(remotecall_fetch($expr, $(esc(p))))
 end
 
 macro everywhere(ex)

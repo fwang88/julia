@@ -325,10 +325,11 @@ function complete_methods(ex_org::Expr)
         push!(args_ex, val)
     end
     out = UTF8String[]
-    t_in = Tuple{args_ex...} # Input types
+    t_in = Tuple{Core.Typeof(func), args_ex...} # Input types
+    na = length(args_ex)+1
     for method in methods(func)
         # Check if the method's type signature intersects the input types
-        typeintersect(Tuple{method.sig.parameters[1 : min(length(args_ex), end)]...}, t_in) != Union{} &&
+        typeintersect(Tuple{method.sig.parameters[1 : min(na, end)]...}, t_in) != Union{} &&
             push!(out,string(method))
     end
     return out

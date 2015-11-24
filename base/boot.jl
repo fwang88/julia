@@ -254,10 +254,12 @@ abstract DirectIndexString <: AbstractString
 
 immutable ASCIIString <: DirectIndexString
     data::Array{UInt8,1}
+    ASCIIString(d::Array{UInt8,1}) = new(d)
 end
 
 immutable UTF8String <: AbstractString
     data::Array{UInt8,1}
+    UTF8String(d::Array{UInt8,1}) = new(d)
 end
 
 typealias ByteString Union{ASCIIString,UTF8String}

@@ -245,7 +245,7 @@ const UNSHOWN_METHODS = ObjectIdDict(
 function show_method_candidates(io::IO, ex::MethodError)
     is_arg_types = isa(ex.args, DataType)
     arg_types = is_arg_types ? ex.args : typesof(ex.args...)
-    arg_types_param::SimpleVector = arg_types.parameters
+    arg_types_param = Any[arg_types.parameters...]
     # Displays the closest candidates of the given function by looping over the
     # functions methods and counting the number of matching arguments.
     if isa(ex.f, Tuple)
@@ -257,22 +257,37 @@ function show_method_candidates(io::IO, ex::MethodError)
     lines = []
     # These functions are special cased to only show if first argument is matched.
     special = f in [convert, getindex, setindex!]
-    funcs = [f]
+    funcs = Any[(Core.Typeof(f),arg_types_param)]
 
     # An incorrect call method produces a MethodError for convert.
     # It also happens that users type convert when they mean call. So
     # pool MethodErrors for these two functions.
-    f === convert && push!(funcs, call)
+    if f === convert && !isempty(arg_types_param)
+        push!(funcs, (arg_types_param[1],arg_types_param[2:end]))
+    end
 
-    for func in funcs
-        name = typeof(func).name.mt.name
-        for method in methods(func)
+    for (func,arg_types_param) in funcs
+        for method in func.name.mt
             haskey(UNSHOWN_METHODS, method) && continue
             buf = IOBuffer()
-            sig = method.sig.parameters
-            use_constructor_syntax = func == call && !isempty(sig) && isa(sig[1], DataType) &&
-                                     !isempty(sig[1].parameters) && isa(sig[1].parameters[1], DataType)
-            print(buf, "  ", use_constructor_syntax ? sig[1].parameters[1].name : name)
+            s1 = method.sig.parameters[1]
+            sig = method.sig.parameters[2:end]
+            print(buf, "  ")
+            if !(func <: s1)
+                # function itself doesn't match
+                print(buf, "(")
+                if Base.have_color
+                    Base.with_output_color(:red, buf) do buf
+                        print(buf, "::", s1)
+                    end
+                else
+                    print(buf, "!Matched::", s1)
+                end
+                print(buf, ")")
+            else
+                use_constructor_syntax = func.name === Type.name && !isa(func.parameters[1],TypeVar)
+                print(buf, use_constructor_syntax ? func.parameters[1] : func.name.mt.name)
+            end
             right_matches = 0
             tv = method.tvars
             if !isa(tv,SimpleVector)
@@ -282,10 +297,10 @@ function show_method_candidates(io::IO, ex::MethodError)
                 show_delim_array(buf, tv, '{', ',', '}', false)
             end
             print(buf, "(")
-            t_i = Any[arg_types_param...]
+            t_i = copy(arg_types_param)
             right_matches = 0
             for i = 1 : min(length(t_i), length(sig))
-                i > (use_constructor_syntax ? 2 : 1) && print(buf, ", ")
+                i > 1 && print(buf, ", ")
                 # If isvarargtype then it checks wether the rest of the input arguements matches
                 # the varargtype
                 if Base.isvarargtype(sig[i])
@@ -300,9 +315,7 @@ function show_method_candidates(io::IO, ex::MethodError)
                 # If the function is one of the special cased then it should break the loop if
                 # the type of the first argument is not matched.
                 t_in === Union{} && special && i == 1 && break
-                if use_constructor_syntax && i == 1
-                    right_matches += i
-                elseif t_in === Union{}
+                if t_in === Union{}
                     if Base.have_color
                         Base.with_output_color(:red, buf) do buf
                             print(buf, "::$sigstr")

@@ -2710,17 +2710,6 @@ So far only the second case can actually occur.
                `(call (top typeassert) ,(cadr e) ,(caddr e)))))
         ((lambda)
 	 (analyze-vars-lambda e env captvars sp '()))
-        ((localize)
-         ;; special feature for @spawn that wraps a piece of code in a "let"
-         ;; binding each free variable.
-         (let ((env-vars (map vinfo:name env))
-               (localize-vars (cddr e)))
-           (let ((vs (filter
-                      (lambda (v) (or (memq v localize-vars)
-                                      (memq v env-vars)))
-                      (free-vars (cadr e)))))
-             ;; TODO jb/functions
-             (analyze-vars (cadr e) env captvars sp))))
 	((with-static-parameters)
 	 ;; (with-static-parameters func_expr sp_1 sp_2 ...)
 	 (assert (eq? (car (cadr e)) 'lambda))
@@ -2783,6 +2772,15 @@ So far only the second case can actually occur.
  12. handle local method definitions inside `if` blocks, etc.
 
  13. don't allocate MethodTable for abstract types
+
+ 14. fix (apparent) duplicate data in inference.ji
+
+ 15. decide what if anything to do about method overwrite warnings in core constructors
+
+ 16. is there a more efficient way to have huge #s of types with only default constructors?
+
+other:
+- methods(ASCIIString) shows entire Type methods list; should restrict to ASCIIString
 |#
 
 (define (clear-capture-bits vinfos)

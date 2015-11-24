@@ -1316,7 +1316,7 @@ void JL_NORETURN jl_no_method_error_bare(jl_function_t *f, jl_value_t *args)
 void JL_NORETURN jl_no_method_error(jl_function_t *f, jl_value_t **args,
                                     size_t na)
 {
-    jl_value_t *argtup = jl_f_tuple(NULL, args, na);
+    jl_value_t *argtup = jl_f_tuple(NULL, args+1, na-1);
     JL_GC_PUSH1(&argtup);
     jl_no_method_error_bare(f, argtup);
     // not reached
@@ -1909,20 +1909,21 @@ JL_DLLEXPORT jl_value_t *jl_gf_invoke_lookup(jl_datatype_t *types)
 // every definition has its own private method table for this purpose.
 //
 // NOTE: assumes argument type is a subtype of the lookup type.
-jl_value_t *jl_gf_invoke(jl_tupletype_t *types, jl_value_t **args, size_t nargs)
+jl_value_t *jl_gf_invoke(jl_tupletype_t *types0, jl_value_t **args, size_t nargs)
 {
     jl_svec_t *tpenv=jl_emptysvec;
     jl_tupletype_t *newsig=NULL;
     jl_tupletype_t *tt=NULL;
+    jl_tupletype_t *types=NULL;
     JL_GC_PUSH4(&types, &tpenv, &newsig, &tt);
     jl_value_t *gf = args[0];
-    types = (jl_datatype_t*)jl_argtype_with_function(gf, (jl_tupletype_t*)types);
+    types = (jl_datatype_t*)jl_argtype_with_function(gf, (jl_tupletype_t*)types0);
     jl_methtable_t *mt = jl_gf_mtable(gf);
     jl_methlist_t *m = (jl_methlist_t*)jl_gf_invoke_lookup(types);
     size_t i;
 
     if ((jl_value_t*)m == jl_nothing) {
-        jl_no_method_error_bare(gf, (jl_value_t*)types);
+        jl_no_method_error_bare(gf, (jl_value_t*)types0);
         // unreachable
     }
 
