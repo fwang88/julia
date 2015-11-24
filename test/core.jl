@@ -3464,8 +3464,11 @@ let T=TypeVar(:T,true)
 end
 
 # issue 13855
-@eval @noinline function foo13855(x)
-    $(Expr(:localize, :(() -> x)))
+macro m13855()
+    Expr(:localize, :(() -> x))
+end
+@noinline function foo13855(x)
+    @m13855()
 end
 @test foo13855(Base.AddFun())() == Base.AddFun()
 @test foo13855(Base.MulFun())() == Base.MulFun()
