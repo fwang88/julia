@@ -774,7 +774,7 @@ jl_value_t *jl_first_argument_datatype(jl_value_t *argtypes)
     return (jl_value_t*)first_arg_datatype(argtypes, 0);
 }
 
-DLLEXPORT void jl_method_def(jl_svec_t *argdata, jl_lambda_info_t *f, jl_value_t *isstaged)
+JL_DLLEXPORT void jl_method_def(jl_svec_t *argdata, jl_lambda_info_t *f, jl_value_t *isstaged)
 {
     // argdata is svec({types...}, svec(typevars...))
     jl_tupletype_t *argtypes = (jl_tupletype_t*)jl_svecref(argdata,0);

@@ -261,9 +261,9 @@ function gen_call_with_extracted_types(fcn, ex0)
         if any(e->(isa(e, Expr) && e.head==:(...)), ex0.args) &&
             isa(ex.args[1], TopNode) && ex.args[1].name == :_apply
             # check for splatting
-            exret = Expr(:call, ex.args[1], ex.args[2], fcn,
-                        Expr(:tuple, esc(ex.args[3]),
-                            Expr(:call, typesof, map(esc, ex.args[4:end])...)))
+            exret = Expr(:call, ex.args[1], fcn,
+                        Expr(:tuple, esc(ex.args[2]),
+                            Expr(:call, typesof, map(esc, ex.args[3:end])...)))
         else
             exret = Expr(:call, fcn, esc(ex.args[1]),
                          Expr(:call, typesof, map(esc, ex.args[2:end])...))

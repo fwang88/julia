@@ -166,14 +166,21 @@
       (cadr e)))
 
 (define (new-expansion-env-for x env)
-  (append!
-   (filter (lambda (v)
-             (not (assq (car v) env)))
-           (append!
-            (pair-with-gensyms (vars-introduced-by x))
-            (map (lambda (v) (cons v v))
-                 (keywords-introduced-by x))))
-   env))
+  (let ((globals (find-declared-vars-in-expansion x 'global)))
+    (let ((v (diff (delete-duplicates
+                    (append! (find-declared-vars-in-expansion x 'local)
+                             (find-assigned-vars-in-expansion x)
+                             (map (lambda (v)
+                                    (if (pair? v) (car v) v))
+                                  (vars-introduced-by x))))
+                   globals)))
+      (append!
+       (filter (lambda (v) (not (assq (car v) env)))
+	       (append!
+		(pair-with-gensyms v)
+		(map (lambda (v) (cons v v))
+		     (diff (keywords-introduced-by x) globals))))
+       env))))
 
 (define (resolve-expansion-vars-with-new-env x env m inarg)
   (resolve-expansion-vars-
@@ -260,20 +267,9 @@
 			 (expr-find-all (lambda (v)
 					  (and (symbol? v) (or (memq v lvars)
 							       (assq v env))))
-					expr identity))))
-		`(call (-> (tuple ,@vs) ,(resolve-expansion-vars- expr env m inarg))
-		       ,@vs)
-		#;(resolve-expansion-vars- (if (null? vs)
-					     expr
-					     `(call (-> (tuple ,@vs) ,expr)
-						    ,@(if (and (pair? expr) (eq? (car expr) 'escape))
-							  (map (lambda (v)
-								 (if (not (assq v env))
-								     `(escape ,v)
-								     v))
-							       vs)
-							  vs)))
-					 env m inarg))))
+					expr identity)))
+                    (e2 (resolve-expansion-vars-with-new-env expr env m inarg)))
+		`(call (-> (tuple ,@vs) ,e2) ,@vs))))
 
            ((let)
             (let* ((newenv (new-expansion-env-for e env))
@@ -307,30 +303,48 @@
         ((eq? (car e) 'curly)  (decl-var* (cadr e)))
         (else                  (decl-var e))))
 
-(define (find-declared-vars-in-expansion e decl)
-  (if (or (not (pair? e)) (quoted? e))
-      '()
-      (cond ((eq? (car e) 'escape)  '())
-            ((eq? (car e) decl)     (map decl-var* (cdr e)))
-            (else
-             (apply append! (map (lambda (x)
-                                   (find-declared-vars-in-expansion x decl))
-                                 e))))))
+(define (function-def? e)
+  (and (pair? e) (or (eq? (car e) 'function) (eq? (car e) '->)
+		     (and (eq? (car e) '=) (length= e 3)
+			  (pair? (cadr e)) (eq? (caadr e) 'call)))))
 
-(define (find-assigned-vars-in-expansion e)
-  (if (or (not (pair? e)) (quoted? e))
-      '()
-      (case (car e)
-        ((escape)  '())
-        ((= function)
-         (append! (filter
-                   symbol?
-                   (if (and (pair? (cadr e)) (eq? (car (cadr e)) 'tuple))
-                       (map decl-var* (cdr (cadr e)))
-                       (list (decl-var* (cadr e)))))
-                  (find-assigned-vars-in-expansion (caddr e))))
-        (else
-         (apply append! (map find-assigned-vars-in-expansion e))))))
+(define (find-declared-vars-in-expansion e decl (outer #t))
+  (cond ((or (not (pair? e)) (quoted? e)) '())
+	((eq? (car e) 'escape)  '())
+	((eq? (car e) 'localize) '())
+	((eq? (car e) decl)     (map decl-var* (cdr e)))
+	((and (not outer) (function-def? e)) '())
+	(else
+	 (apply append! (map (lambda (x)
+			       (find-declared-vars-in-expansion x decl #f))
+			     e)))))
+
+(define (find-assigned-vars-in-expansion e (outer #t))
+  (cond ((or (not (pair? e)) (quoted? e))  '())
+	((eq? (car e) 'escape)  '())
+	((eq? (car e) 'localize) '())
+	((and (not outer) (function-def? e))
+	 ;; pick up only function name
+	 (let ((fname (cond ((eq? (car e) '=) (cadr (cadr e)))
+			    ((eq? (car e) 'function)
+			     (if (eq? (car (cadr e)) 'tuple)
+				 #f
+				 (cadr (cadr e))))
+			    (else #f))))
+	   (if (symbol? fname)
+	       (list fname)
+	       '())))
+	((memq (car e) '(= function))
+	 (append! (filter
+		   symbol?
+		   (if (and (pair? (cadr e)) (eq? (car (cadr e)) 'tuple))
+		       (map decl-var* (cdr (cadr e)))
+		       (list (decl-var* (cadr e)))))
+		  (find-assigned-vars-in-expansion (caddr e) #f)))
+	(else
+	 (apply append! (map (lambda (x)
+			       (find-assigned-vars-in-expansion x #f))
+			     e)))))
 
 (define (vars-introduced-by e)
   (let ((v (pattern-expand1 vars-introduced-by-patterns e)))
@@ -344,27 +358,11 @@
         (cdr v)
         '())))
 
-(define (env-for-expansion e)
-  ;; TODO jb/functions don't find all assigned vars; narrow it to new vars that
-  ;; would be introduced by just *this* expression (`e`)
-  (let ((globals (find-declared-vars-in-expansion e 'global)))
-    (let ((v (diff (delete-duplicates
-                    (append! (find-declared-vars-in-expansion e 'local)
-                             (find-assigned-vars-in-expansion e)
-                             (map (lambda (x)
-                                    (if (pair? x) (car x) x))
-                                  (vars-introduced-by e))))
-                   globals)))
-      (append!
-       (pair-with-gensyms v)
-       (map (lambda (s) (cons s s))
-            (diff (keywords-introduced-by e) globals))))))
-
 (define (resolve-expansion-vars e m)
   ;; expand binding form patterns
   ;; keep track of environment, rename locals to gensyms
   ;; and wrap globals in (getfield module var) for macro's home module
-  (resolve-expansion-vars- e (env-for-expansion e) m #f))
+  (resolve-expansion-vars-with-new-env e '() m #f))
 
 (define (find-symbolic-labels e)
   (let ((defs (table))

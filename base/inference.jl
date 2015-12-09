@@ -6,6 +6,14 @@ const MAX_TYPE_DEPTH = 7
 const MAX_TUPLETYPE_LEN  = 8
 const MAX_TUPLE_DEPTH = 4
 
+# avoid cycle due to over-specializing `any` when used by inference
+function _any(f::ANY, a)
+    for x in a
+        f(x) && return true
+    end
+    return false
+end
+
 immutable NotFound
 end
 
@@ -197,6 +205,18 @@ add_tfunc(typeof, 1, 1, typeof_tfunc)
 add_tfunc(typeassert, 2, 2,
     (A, v, t)->(isType(t) ? typeintersect(v,t.parameters[1]) : Any))
 
+function type_depth(t::ANY, d::Int=0)
+    if isa(t,Union)
+        t === Bottom && return d
+        return maximum(x->type_depth(x, d+1), t.types)
+    elseif isa(t,DataType)
+        P = t.parameters
+        isempty(P) && return d
+        return maximum(x->type_depth(x, d+1), P)
+    end
+    return d
+end
+
 function limit_type_depth(t::ANY, d::Int, cov::Bool, vars)
     if isa(t,TypeVar) || isa(t,TypeConstructor)
         return t
@@ -217,7 +237,7 @@ function limit_type_depth(t::ANY, d::Int, cov::Bool, vars)
         else
             stillcov = cov && (t.name === Tuple.name)
             Q = map(x->limit_type_depth(x, d+1, stillcov, vars), P)
-            if !cov && any(p->contains_is(vars,p), Q)
+            if !cov && _any(p->contains_is(vars,p), Q)
                 R = t.name.primary
                 inexact = true
             else
@@ -290,7 +310,7 @@ const getfield_tfunc = function (A, s0::ANY, name)
                     return R, true
                 else
                     typ = limit_type_depth(R, 0, true,
-                                            filter!(x->isa(x,TypeVar), Any[s.parameters...]))
+                                           filter!(x->isa(x,TypeVar), Any[s.parameters...]))
                     return typ, isleaftype(s) && typeseq(typ, R)
                 end
             end
@@ -648,6 +668,12 @@ function abstract_call_gf(f::ANY, fargs, argtype::ANY, e)
     if istopfunction(tm, f, :promote_type) || istopfunction(tm, f, :typejoin)
         return Type
     end
+    ft = isa(f,Type) ? Type{f} : typeof(f)
+    return abstract_call_gf_by_type(ft, f, fargs, argtype, e)
+end
+
+function abstract_call_gf_by_type(ft::ANY, f::ANY, fargs, argtype::ANY, e)
+    tm = _topmod()
     # don't consider more than N methods. this trades off between
     # compiler performance and generated code performance.
     # typically, considering many methods means spending lots of time
@@ -657,7 +683,7 @@ function abstract_call_gf(f::ANY, fargs, argtype::ANY, e)
     # here I picked 4.
     argtype = limit_tuple_type(argtype)
     argtypes = argtype.parameters
-    applicable = _methods(f, argtype, 4)
+    applicable = _methods_by_ftype(ft, argtype, 4)
     rettype = Bottom
     if is(applicable,false)
         # this means too many methods matched
@@ -767,7 +793,7 @@ function precise_container_types(args, types, vtypes, sv)
         if isa(ai,Expr) && (is_known_call(ai, svec, sv) || is_known_call(ai, tuple, sv))
             aa = ai.args
             result[i] = Any[ (isa(aa[j],Expr) ? aa[j].typ : abstract_eval(aa[j],vtypes,sv)) for j=2:length(aa) ]
-            if any(isvarargtype, result[i])
+            if _any(isvarargtype, result[i])
                 return nothing
             end
         elseif ti === Union{}
@@ -965,7 +991,7 @@ function abstract_eval_call(e, vtypes, sv::StaticVarInfo)
     fargs = e.args[2:end]
     argtypes = Any[abstract_eval(a, vtypes, sv) for a in fargs]
     #print("call ", e.args[1], argtypes, "\n\n")
-    if any(x->is(x,Bottom), argtypes)
+    if _any(x->is(x,Bottom), argtypes)
         return Bottom
     end
     called = e.args[1]
@@ -977,7 +1003,15 @@ function abstract_eval_call(e, vtypes, sv::StaticVarInfo)
         elseif isleaftype(ft) && isdefined(ft,:instance)
             f = ft.instance
         else
-            # TODO jb/functions: take advantage of case where a non-constant function's type is known
+            for i=1:(length(argtypes)-1)
+                if isvarargtype(argtypes[i])
+                    return Any
+                end
+            end
+            # non-constant function, but type is known
+            if isleaftype(ft) && !(ft <: Builtin) && !(ft <: IntrinsicFunction)
+                return abstract_call_gf_by_type(ft, nothing, fargs, Tuple{argtypes...}, e)
+            end
             return Any
         end
     else
@@ -1177,8 +1211,7 @@ function abstract_interpret(e::ANY, vtypes, sv::StaticVarInfo)
         abstract_eval(e.args[1], vtypes, sv)
     elseif is(e.head,:method)
         fname = e.args[1]
-        if isa(fname,Symbol)
-            # TODO jb/functions
+        if isa(fname,Symbol) && length(e.args)==1
             return StateUpdate(fname, VarState(Any,false), vtypes)
         end
     end
@@ -1447,6 +1480,45 @@ function typeinf_uncached(linfo::LambdaStaticData, atypes::ANY, sparams::SimpleV
     #print("typeinf ", ast0, " ", sparams, " ", atypes, "\n")
 
     global inference_stack, CYCLE_ID
+
+    f = inference_stack
+    while !isa(f,EmptyCallStack)
+        if is(f.ast,ast0)
+            # impose limit if we recur and the argument types grow beyond MAX_TYPE_DEPTH
+            td = type_depth(atypes)
+            if td > type_depth(f.types)
+                if td > MAX_TYPE_DEPTH
+                    atypes = limit_type_depth(atypes, 0, true, [])
+                    break
+                else
+                    p1, p2 = atypes.parameters, f.types.parameters
+                    n = length(p1)
+                    if length(p2) == n
+                        limited = false
+                        newatypes = Array(Any, n)
+                        for i = 1:n
+                            if p1[i] <: Function && type_depth(p1[i]) > type_depth(p2[i]) &&
+                                isa(p1[i],DataType)
+                                # if a Function argument is growing (e.g. nested closures)
+                                # then widen to the outermost function type. without this
+                                # inference fails to terminate on do_quadgk.
+                                newatypes[i] = p1[i].name.primary
+                                limited = true
+                            else
+                                newatypes[i] = p1[i]
+                            end
+                        end
+                        if limited
+                            atypes = Tuple{newatypes...}
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        f = f.prev
+    end
+
     # check for recursion
     f = inference_stack
     while !isa(f,EmptyCallStack)
@@ -2976,7 +3048,7 @@ function remove_redundant_temp_vars(ast, sa)
     body = ast.args[3]
     for (v,init) in sa
         if ((isa(init,Symbol) || isa(init,SymbolNode)) &&
-            any(vi->symequal(vi[1],init), varinfo) &&
+            _any(vi->symequal(vi[1],init), varinfo) &&
             !is_var_assigned(ast, init))
 
             # this transformation is not valid for vars used before def.

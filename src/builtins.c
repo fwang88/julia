@@ -1060,10 +1060,7 @@ jl_lambda_info_t *jl_method_cache_insert(jl_methtable_t *mt, jl_tupletype_t *typ
 jl_value_t *jl_mk_builtin_func(const char *name, jl_fptr_t fptr)
 {
     jl_sym_t *sname = jl_symbol(name);
-    jl_datatype_t *ftype = jl_new_datatype(sname, jl_builtin_type, jl_emptysvec,
-                                           jl_emptysvec, jl_emptysvec, 0, 0, 0);
-    jl_value_t *f = jl_new_struct(ftype);
-    ftype->instance = f; jl_gc_wb(ftype, f);
+    jl_value_t *f = jl_new_generic_function_with_supertype(sname, jl_core_module, jl_builtin_type);
     jl_lambda_info_t *li = jl_new_lambda_info(jl_nothing, jl_emptysvec, jl_core_module);
     li->fptr = fptr;
     li->name = sname;

@@ -84,17 +84,6 @@ tag = Base.have_color ? Base.text_colors[:red] : "ARRAY{FLOAT64,N}"
 @test !warntype_hastag(getindex, Tuple{Stable{Float64,2},Int}, tag)
 @test warntype_hastag(getindex, Tuple{Stable{Float64},Int}, tag)
 
-function funfun(x)
-    function internal(y)
-        return 2y
-    end
-    z = internal(3)
-    x
-end
-
-tag = Base.have_color ? string("2y",Base.text_colors[:red],"::Any") : "2y::ANY"
-@test warntype_hastag(funfun, Tuple{Float64}, tag)
-
 # Make sure emphasis is not used for other functions
 tag = Base.have_color ? Base.text_colors[:red] : "ANY"
 iob = IOBuffer()
@@ -121,7 +110,7 @@ end
 i10165(::DataType) = 0
 i10165{T,n}(::Type{AbstractArray{T,n}}) = 1
 @test i10165(AbstractArray{Int}) == 0
-@test which(i10165, Tuple{Type{AbstractArray{Int}},}).sig == Tuple{DataType,}
+@test which(i10165, Tuple{Type{AbstractArray{Int}},}).sig == Tuple{typeof(i10165),DataType}
 
 # fullname
 @test fullname(Base) == (:Base,)

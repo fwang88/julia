@@ -73,7 +73,7 @@ immutable DateFunction
         return new(@eval x->$n($f(x)))
     end
 end
-Base.show(io::IO,df::DateFunction) = println(io, df.f.code)
+Base.show(io::IO,df::DateFunction) = println(io, df.f)
 
 # Core adjuster
 function adjust(df::DateFunction,start,step,limit)

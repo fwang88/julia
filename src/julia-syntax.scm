@@ -385,11 +385,8 @@
          (keyword-sparam-names
           (map (lambda (s) (if (symbol? s) s (cadr s))) keyword-sparams)))
     (let ((kw (gensy)) (i (gensy)) (ii (gensy)) (elt (gensy)) (rkw (gensy))
-          (mangled (symbol (string "__"
-                                   (undot-name name)
-                                   "#"
-                                   (string.sub (string (gensym)) 1)
-                                   "__")))
+          (mangled (symbol (string "#" (if name (undot-name name) 'call) "#"
+				   (string (current-julia-module-counter)))))
           (flags (map (lambda (x) (gensy)) vals)))
       `(block
         ;; call with no keyword args
@@ -938,7 +935,9 @@
          (let ((argl (if (and (pair? a) (eq? (car a) 'tuple))
 			 (cdr a)
 			 (list a)))
-	       (name (gensym)))
+	       ;; TODO: always use a specific special name like #anon# or _, then ignore
+	       ;; this as a local variable name.
+	       (name (symbol (string "#" (current-julia-module-counter)))))
            (expand-binding-forms
 	    `(function (call ,name ,@argl) ,body)))))
 
@@ -2740,47 +2739,47 @@ So far only the second case can actually occur.
 (define (analyze-variables e) (analyze-vars e '() '() '()))
 
 #|
+ * #14009 type growth issue (now worse with specialized closures)
+ * fix `localize` and get all tests passing
+ - don't specialize slots where a function is passed but not called
+
+ - filter method tables and caches before `dump` to remove references to
+   replaced modules --- those where eval(m->parent, m->name) != m
+
  1. Figure out how to pass in static parameters in --compile=no mode, fix --compile=all.
 
- 2. repair precompilation
-
- 3. Figure out closure serialization. maybe only fully serialize types from
+*3. Figure out closure serialization. maybe only fully serialize types from
  Main.__hidden__
+ idea: record the max module->counter after lowering is complete. anything higher than
+ this might be nondeterministic, and needs to be serialized in full.
 
  4. Staged functions containing closures are probably not lowered correctly
  (jl_instantiate_staged).
 
- 5. too many gensyms; maybe move generated toplevel definitions to
- a __hidden__ submodule. moreover, references in __hidden__ can be consideered
- weak. if __hidden__ has the only reference to a type, it can be removed.
 
+ 6. reduce amount of specialization on closure types somehow
 
- 6. nice deprecation for `call` overloading
+*6.1. cache_arg1 should actually look at arg 2 now for most functions
 
- 7. reduce amount of specialization on closure types somehow
+*8. improve typing of closure fields; remove Box for single-assigned vars;
 
- 8. improve typing of closure fields; remove Box for single-assigned vars;
- specialized Box{T} for mutable bindings with declared types. remove redundant Boxes.
+ 8.1. specialized Box{T} for mutable bindings with declared types. remove redundant Boxes.
+
+*8.2. inference for known-type non-constant functions
 
  9. propagate static parameters into closure types, so e.g. closure method
  signatures can depend on them.
 
- 10. decide if/how to present extra function argument when printing things
 
- 11. better ctor syntax
+ 10. nice deprecation for `call` overloading
 
- 12. handle local method definitions inside `if` blocks, etc.
+ 13. better handle local method definitions inside `if` blocks, etc.
 
- 13. don't allocate MethodTable for abstract types
-
- 14. fix (apparent) duplicate data in inference.ji
+ 14. don't allocate MethodTable for abstract types
 
  15. decide what if anything to do about method overwrite warnings in core constructors
 
  16. is there a more efficient way to have huge #s of types with only default constructors?
-
-other:
-- methods(ASCIIString) shows entire Type methods list; should restrict to ASCIIString
 |#
 
 (define (vinfo:not-capt vi)
@@ -2789,7 +2788,7 @@ other:
 (define (clear-capture-bits vinfos)
   (map vinfo:not-capt vinfos))
 
-(define (convert-lambda lam fname tname interp)
+(define (convert-lambda lam fname interp)
   `(lambda ,(lam:args lam)
      (,(clear-capture-bits (car (lam:vinfo lam)))
       ()
@@ -2896,6 +2895,12 @@ other:
 			  (set-car! (cddr v) (logand (caddr v) (lognot 5)))))
 		    vi)))
     lam))
+
+(define (is-var-boxed? v lam)
+  (let ((vi (assq v (car  (lam:vinfo lam))))
+        (cv (assq v (cadr (lam:vinfo lam)))))
+    (or (and cv (vinfo:asgn cv) (vinfo:capt cv))
+        (and vi (vinfo:asgn vi) (vinfo:capt vi)))))
 
 (define (closure-convert e) (cl-convert e #f #f #f #f #f))
 
@@ -3012,11 +3017,13 @@ other:
                                     `(quote
                                       ,(to-goto-form
                                         (renumber-jlgensym
-                                         (convert-lambda lam2 '__anon__ #f #t)))))
+                                         (convert-lambda lam2 '|#anon| #t)))))
                                   ,(last e)))))
                  ;; local case - lift to a new type at top level
                  (let* ((exists (get namemap name #f))
-                        (tname  (or exists (named-gensy name)))
+                        (tname  (or exists
+                                    (and name
+                                         (symbol (string "#" name "#" (current-julia-module-counter))))))
                         (cvs   (delete-duplicates
                                 (apply append
                                        ;; merge captured vars from all definitions
@@ -3034,13 +3041,24 @@ other:
                                              identity
                                              (lambda (x) (and (pair? x) (not (eq? (car x) 'lambda)))))))))
                         (typedef  ;; expression to define the type
-                         (cadr
-                          (julia-expand-for-cl-convert
-                           `(thunk
-                             (lambda ()
-                               (scope-block
-                                (block (type #f (<: ,tname (top Function))
-                                             (block ,@cvs)))))))))
+                         (let ((fieldtypes (map (lambda (v)
+                                                  (if (is-var-boxed? v lam)
+                                                      'Any ;; TODO
+                                                      (gensy)))
+                                                cvs)))
+                           (cadr
+                            (julia-expand-for-cl-convert
+                             `(thunk
+                               (lambda ()
+                                 (scope-block
+                                  (block (type #f (<: (curly ,tname ,@(filter (lambda (v) (not (eq? v 'Any)))
+                                                                              fieldtypes))
+                                                      (top Function))
+                                               (block ,@(map (lambda (v t)
+                                                               (if (eq? t 'Any)
+                                                                   v
+                                                                   `(|::| ,v ,t)))
+                                                             cvs fieldtypes)))))))))))
                         (mk-closure  ;; expression to make the closure
                          `(call ,tname ,@(map (lambda (v)
                                                 (let ((cv (assq v (cadr (lam:vinfo lam)))))
@@ -3064,7 +3082,7 @@ other:
                                                       (if iskw
                                                           (caddr (lam:args lam2))
                                                           (car (lam:args lam2)))
-                                                      tname #f)
+                                                      #f)
                                      ,(last e))))
                      ,(if exists
                           '(null)
@@ -3253,6 +3271,15 @@ other:
              (if (not (and (pair? code) (equal? (car code) e)))
                  (emit e)
                  #f))
+            ((method)
+             ;; fix residual blocks in method def type sig
+             (if (and (length> e 2) (eq? (car (caddr e)) 'block))
+                 (let ((sig (caddr e)))
+                   (for-each (lambda (x) (emit (goto-form x)))
+                             (butlast (cdr sig)))
+                   (emit (goto-form `(method ,(cadr e) ,(last sig)
+                                             ,@(cdddr e)))))
+                 (emit (goto-form e))))
             (else  (emit (goto-form e))))))
     (compile e '())
     (let* ((stmts (reverse! code))

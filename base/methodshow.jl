@@ -47,8 +47,8 @@ function show(io::IO, m::Method)
     d1 = decls[1]
     if isa(ft,DataType) && (isempty(ft.parameters) && nfields(ft)==0 &&
                             isdefined(ft.name.module,ft.name.name) &&
-                            ft == typeof(getfield(ft.name.module,ft.name.name)))
-        print(io, ft.name.name)
+                            ft == getfield(ft.name.module,ft.name.name))
+        print(io, ft.name.mt.name)
     else
         print(io, "(", d1[1], "::", d1[2], ")")
     end
@@ -137,8 +137,16 @@ function url(m::Method)
 end
 
 function writemime(io::IO, ::MIME"text/html", m::Method)
-    print(io, m.func.name)
     tv, decls, file, line = arg_decl_parts(m)
+    ft = m.sig.parameters[1]
+    d1 = decls[1]
+    if isa(ft,DataType) && (isempty(ft.parameters) && nfields(ft)==0 &&
+                            isdefined(ft.name.module,ft.name.name) &&
+                            ft == getfield(ft.name.module,ft.name.name))
+        print(io, ft.name.mt.name)
+    else
+        print(io, "(", d1[1], "::<b>", d1[2], "</b>)")
+    end
     if !isempty(tv)
         print(io,"<i>")
         show_delim_array(io, tv, '{', ',', '}', false)
@@ -146,7 +154,7 @@ function writemime(io::IO, ::MIME"text/html", m::Method)
     end
     print(io, "(")
     print_joined(io, [isempty(d[2]) ? d[1] : d[1]*"::<b>"*d[2]*"</b>"
-                      for d in decls], ", ", ", ")
+                      for d in decls[2:end]], ", ", ", ")
     print(io, ")")
     if line > 0
         u = url(m)

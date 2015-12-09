@@ -1262,7 +1262,7 @@ void *jl_function_ptr_by_llvm_name(char* name) {
     return (void*)(intptr_t)jl_ExecutionEngine->FindFunctionNamed(name);
 }
 
-extern "C" DLLEXPORT void *jl_global_address_by_name(char *name)
+extern "C" JL_DLLEXPORT void *jl_global_address_by_name(char *name)
 {
     return (void*)jl_ExecutionEngine->getPointerToGlobal(jl_Module->getGlobalVariable(name,true));
 }
@@ -1303,20 +1303,19 @@ extern "C" JL_DLLEXPORT
 void *jl_get_llvmf(jl_function_t *f, jl_tupletype_t *tt, bool getwrapper)
 {
     jl_lambda_info_t *sf=NULL;
+    JL_GC_PUSH2(&sf, &tt);
     if (tt != NULL)
         sf = jl_get_specialization(f, tt);
     if (sf == NULL) {
-        // TOOD jb/functions
-        return NULL;
-        /*
+        tt = jl_argtype_with_function(f, tt);
         sf = jl_method_lookup_by_type(jl_gf_mtable(f), tt, 0, 0);
-        if (sf == NULL)
+        if (sf == NULL) {
+            JL_GC_POP();
             return NULL;
+        }
         jl_printf(JL_STDERR,
                   "WARNING: Returned code may not match what actually runs.\n");
-        */
     }
-    JL_GC_PUSH1(&sf);
     if (sf->specFunctionObject != NULL) {
         // found in the system image: force a recompile
         Function *llvmf = (Function*)sf->specFunctionObject;
@@ -2399,7 +2398,7 @@ static bool emit_builtin_call(jl_cgval_t *ret, jl_value_t *f, jl_value_t **args,
                     jl_cgval_t arg1 = emit_expr(args[1], ctx);
                     *ret = mark_julia_type(
                             builder.CreateICmpEQ(emit_typeof(arg1),
-                                                literal_pointer_val(tp0)),
+                                                 literal_pointer_val(tp0)),
                             false,
                             jl_bool_type);
                     JL_GC_POP();

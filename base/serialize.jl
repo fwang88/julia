@@ -623,6 +623,9 @@ function deserialize(s::SerializationState, ::Type{TypeName})
     return tn
 end
 
+module __deserialized_types__
+end
+
 function deserialize_datatype(s::SerializationState)
     form = read(s.io, UInt8)::UInt8
     if (form&2) != 0
@@ -632,16 +635,18 @@ function deserialize_datatype(s::SerializationState)
             ty = getfield(tname.module, tname.name)
         else
             ty = tname.primary
+            # assign to a new name inside a special module, reset tname.module and tname.name
+            newname = gensym()
+            tname.module = __deserialized_types__
+            tname.name = newname
+            ccall(:jl_set_const, Void, (Any, Any, Any), __deserialized_types__, newname, ty)
         end
     else
         name = deserialize(s)::Symbol
         mod = deserialize(s)::Module
         ty = getfield(mod,name)
     end
-    if !isa(ty,DataType)
-        # mod.name is bound to instance instead. this happens for toplevel generic functions.
-        ty = typeof(ty).name.primary
-    end
+    assert(isa(ty,DataType))
     if isempty(ty.parameters)
         t = ty
     else

@@ -384,6 +384,7 @@ typedef struct _jl_module_t {
     uint8_t istopmod;
     uint8_t std_imports;  // only for temporarily deprecating `importall Base.Operators`
     uint64_t uuid;
+    uint32_t counter;
 } jl_module_t;
 
 typedef struct _jl_methlist_t {
@@ -1006,6 +1007,8 @@ JL_DLLEXPORT jl_sym_t *jl_get_root_symbol(void);
 JL_DLLEXPORT jl_value_t *jl_generic_function_def(jl_sym_t *name, jl_value_t **bp,
                                                  jl_value_t *bp_owner,
                                                  jl_binding_t *bnd);
+JL_DLLEXPORT jl_function_t *jl_new_generic_function(jl_sym_t *name, jl_module_t *module);
+JL_DLLEXPORT jl_function_t *jl_new_generic_function_with_supertype(jl_sym_t *name, jl_module_t *module, jl_datatype_t *st);
 JL_DLLEXPORT void jl_method_def(jl_svec_t *argdata, jl_lambda_info_t *f, jl_value_t *isstaged);
 JL_DLLEXPORT jl_value_t *jl_box_bool(int8_t x);
 JL_DLLEXPORT jl_value_t *jl_box_int8(int8_t x);
@@ -1312,7 +1315,7 @@ STATIC_INLINE int jl_vinfo_usedundef(jl_array_t *vi)
 
 // calling into julia ---------------------------------------------------------
 
-DLLEXPORT jl_value_t *jl_apply_generic(jl_value_t **args, uint32_t nargs);
+JL_DLLEXPORT jl_value_t *jl_apply_generic(jl_value_t **args, uint32_t nargs);
 
 STATIC_INLINE
 jl_value_t *jl_apply(jl_value_t *f, jl_value_t **args, uint32_t nargs)

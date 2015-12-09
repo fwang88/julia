@@ -483,11 +483,25 @@ JL_DLLEXPORT jl_sym_t *jl_tagged_gensym(const char *str, int32_t len)
 
 // allocating types -----------------------------------------------------------
 
+jl_sym_t *jl_demangle_typename(jl_sym_t *s)
+{
+    char *n = jl_symbol_name(s);
+    if (n[0] != '#')
+        return s;
+    char *end = strrchr(n, '#');
+    int32_t len;
+    if (end == n || end == n+1)
+        len = strlen(n) - 1;
+    else
+        len = (end-n) - 1;
+    return jl_symbol_n(&n[1], len);
+}
+
 jl_methtable_t *jl_new_method_table(jl_sym_t *name, jl_module_t *module)
 {
     jl_methtable_t *mt = (jl_methtable_t*)jl_gc_allocobj(sizeof(jl_methtable_t));
     jl_set_typeof(mt, jl_methtable_type);
-    mt->name = name;
+    mt->name = jl_demangle_typename(name);
     mt->module = module;
     mt->defs = (jl_methlist_t*)jl_nothing;
     mt->cache = (jl_methlist_t*)jl_nothing;
@@ -501,7 +515,7 @@ jl_methtable_t *jl_new_method_table(jl_sym_t *name, jl_module_t *module)
     return mt;
 }
 
-DLLEXPORT jl_typename_t *jl_new_typename_in(jl_sym_t *name, jl_module_t *module)
+JL_DLLEXPORT jl_typename_t *jl_new_typename_in(jl_sym_t *name, jl_module_t *module)
 {
     jl_typename_t *tn=(jl_typename_t*)newobj((jl_value_t*)jl_typename_type, NWORDS(sizeof(jl_typename_t)));
     tn->name = name;

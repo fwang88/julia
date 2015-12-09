@@ -135,15 +135,21 @@ tt_cons(t::ANY, tup::ANY) = (@_pure_meta; Tuple{t, (isa(tup, Type) ? tup.paramet
 
 code_lowered(f, t::ANY=Tuple) = map(m->uncompressed_ast(m.func), methods(f, t))
 function methods(f::ANY,t::ANY)
+    if isa(f,Builtin)
+        throw(ArgumentError("argument is not a generic function"))
+    end
     t = to_tuple_type(t)
     Any[m[3] for m in _methods(f,t,-1)]
 end
 function _methods(f::ANY,t::ANY,lim)
     ft = isa(f,Type) ? Type{f} : typeof(f)
+    _methods_by_ftype(ft, t, lim)
+end
+function _methods_by_ftype(ft::ANY, t::ANY, lim)
     if isa(t,Type)
-        _methods(Any[ft, t.parameters...], length(t.parameters), lim, [])
+        _methods(Any[ft, t.parameters...], length(t.parameters)+1, lim, [])
     else
-        _methods(Any[ft, t...], length(t), lim, [])
+        _methods(Any[ft, t...], length(t)+1, lim, [])
     end
 end
 function _methods(t::Array,i,lim::Integer,matching::Array{Any,1})
@@ -171,7 +177,16 @@ function _methods(t::Array,i,lim::Integer,matching::Array{Any,1})
     matching
 end
 
-methods(f::ANY) = typeof(f).name.mt
+function methods(f::ANY)
+    ft = typeof(f)
+    if ft <: Type || !isempty(ft.parameters)
+        # for these types of `f`, not every method in the table will necessarily
+        # match, so we need to filter based on its type.
+        methods(f, Tuple{Vararg{Any}})
+    else
+        ft.name.mt
+    end
+end
 
 function length(mt::MethodTable)
     n = 0
@@ -262,6 +277,9 @@ function return_types(f::ANY, types::ANY=Tuple)
 end
 
 function which(f::ANY, t::ANY)
+    if isa(f,Builtin)
+        throw(ArgumentError("argument is not a generic function"))
+    end
     t = to_tuple_type(t)
     if isleaftype(t)
         ms = methods(f, t)

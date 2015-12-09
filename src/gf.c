@@ -118,7 +118,7 @@ jl_methlist_t *mtcache_hash_lookup(jl_array_t *a, jl_value_t *ty, int tparam)
     uptrint_t uid = ((jl_datatype_t*)ty)->uid;
     jl_methlist_t *ml = (jl_methlist_t*)jl_cellref(a, uid & (a->nrows-1));
     if (ml && ml!=(void*)jl_nothing) {
-        jl_value_t *t = jl_field_type(ml->sig, 0);
+        jl_value_t *t = jl_field_type(ml->sig, 1);
         if (tparam) t = jl_tparam0(t);
         if (t == ty)
             return ml;
@@ -136,7 +136,7 @@ static void mtcache_rehash(jl_array_t **pa, jl_value_t* parent)
     for(i=0; i < len; i++) {
         jl_methlist_t *ml = (jl_methlist_t*)d[i];
         if (ml && ml!=(jl_methlist_t*)jl_nothing) {
-            jl_value_t *t = jl_field_type(ml->sig,0);
+            jl_value_t *t = jl_field_type(ml->sig,1);
             if (jl_is_type_type(t))
                 t = jl_tparam0(t);
             uptrint_t uid = ((jl_datatype_t*)t)->uid;
@@ -158,7 +158,7 @@ static jl_methlist_t **mtcache_hash_bp(jl_array_t **pa, jl_value_t *ty,
                 *pml = (jl_methlist_t*)jl_nothing;
                 return pml;
             }
-            jl_value_t *t = jl_field_type((*pml)->sig,0);
+            jl_value_t *t = jl_field_type((*pml)->sig,1);
             if (tparam) t = jl_tparam0(t);
             if (t == ty)
                 return pml;
@@ -173,12 +173,16 @@ static jl_methlist_t **mtcache_hash_bp(jl_array_t **pa, jl_value_t *ty,
   the first argument is a singleton kind (Type{Foo}), one indexed by the
   UID of the first argument's type in normal cases, and a fallback
   table of everything else.
+
+  Note that the "primary key" is the type of the first *argument*, since
+  there tends to be lots of variation there. The type of the 0th argument
+  (the function) is always the same for most functions.
 */
 static jl_lambda_info_t *jl_method_table_assoc_exact_by_type(jl_methtable_t *mt, jl_tupletype_t *types)
 {
     jl_methlist_t *ml = (jl_methlist_t*)jl_nothing;
-    if (jl_datatype_nfields(types) > 0) {
-        jl_value_t *ty = jl_tparam0(types);
+    if (jl_datatype_nfields(types) > 1) {
+        jl_value_t *ty = jl_tparam(types,1);
         if (jl_is_type_type(ty)) {
             jl_value_t *a0 = jl_tparam0(ty);
             if (mt->cache_targ != (void*)jl_nothing && jl_is_datatype(a0)) {
@@ -212,11 +216,11 @@ static jl_lambda_info_t *jl_method_table_assoc_exact(jl_methtable_t *mt, jl_valu
 {
     // NOTE: This function is a huge performance hot spot!!
     jl_methlist_t *ml = (jl_methlist_t*)jl_nothing;
-    if (n > 0) {
-        jl_value_t *a0 = args[0];
-        jl_value_t *ty = (jl_value_t*)jl_typeof(a0);
-        if (mt->cache_targ != (void*)jl_nothing && ty == (jl_value_t*)jl_datatype_type) {
-            ml = mtcache_hash_lookup(mt->cache_targ, a0, 1);
+    if (n > 1) {
+        jl_value_t *a1 = args[1];
+        jl_value_t *ty = (jl_value_t*)jl_typeof(a1);
+        if (ty == (jl_value_t*)jl_datatype_type && mt->cache_targ != (void*)jl_nothing) {
+            ml = mtcache_hash_lookup(mt->cache_targ, a1, 1);
             if (ml != (void*)jl_nothing)
                 goto mt_assoc_lkup;
         }
@@ -224,19 +228,24 @@ static jl_lambda_info_t *jl_method_table_assoc_exact(jl_methtable_t *mt, jl_valu
         if (mt->cache_arg1 != (void*)jl_nothing) {
             ml = mtcache_hash_lookup(mt->cache_arg1, ty, 0);
             if (ml != (void*)jl_nothing) {
-                if (ml->next==(void*)jl_nothing && n==1 && jl_datatype_nfields(ml->sig)==1)
+                jl_value_t *a0 = args[0];
+                jl_value_t *t0 = (jl_value_t*)jl_typeof(a0);
+                if (ml->next==(void*)jl_nothing && n==2 && jl_datatype_nfields(ml->sig)==2 &&
+                    jl_tparam0(ml->sig)==t0)
                     return ml->func;
-                if (n==2) {
+                if (n==3) {
                     // some manually-unrolled common special cases
-                    jl_value_t *a1 = args[1];
-                    if (!jl_is_tuple(a1)) {  // issue #6426
+                    jl_value_t *a2 = args[2];
+                    if (!jl_is_tuple(a2)) {  // issue #6426
                         jl_methlist_t *mn = ml;
-                        if (jl_datatype_nfields(mn->sig)==2 &&
-                            jl_tparam(mn->sig,1)==(jl_value_t*)jl_typeof(a1))
+                        if (jl_datatype_nfields(mn->sig)==3 &&
+                            jl_tparam0(mn->sig)==t0 &&
+                            jl_tparam(mn->sig,2)==(jl_value_t*)jl_typeof(a2))
                             return mn->func;
                         mn = mn->next;
-                        if (mn!=(void*)jl_nothing && jl_datatype_nfields(mn->sig)==2 &&
-                            jl_tparam(mn->sig,1)==(jl_value_t*)jl_typeof(a1))
+                        if (mn!=(void*)jl_nothing && jl_datatype_nfields(mn->sig)==3 &&
+                            jl_tparam0(mn->sig)==t0 &&
+                            jl_tparam(mn->sig,2)==(jl_value_t*)jl_typeof(a2))
                             return mn->func;
                     }
                 }
@@ -316,14 +325,14 @@ jl_lambda_info_t *jl_method_cache_insert(jl_methtable_t *mt, jl_tupletype_t *typ
 {
     jl_methlist_t **pml = &mt->cache;
     jl_value_t* cache_array = NULL;
-    if (jl_datatype_nfields(type) > 0) {
-        jl_value_t *t0 = jl_tparam0(type);
+    if (jl_datatype_nfields(type) > 1) {
+        jl_value_t *t1 = jl_tparam(type,1);
         uptrint_t uid=0;
-        // if t0 != jl_typetype_type and the argument is Type{...}, this
+        // if t1 != jl_typetype_type and the argument is Type{...}, this
         // method has specializations for singleton kinds and we use
         // the table indexed for that purpose.
-        if (t0 != (jl_value_t*)jl_typetype_type && jl_is_type_type(t0)) {
-            jl_value_t *a0 = jl_tparam0(t0);
+        if (t1 != (jl_value_t*)jl_typetype_type && jl_is_type_type(t1)) {
+            jl_value_t *a0 = jl_tparam0(t1);
             if (jl_is_datatype(a0))
                 uid = ((jl_datatype_t*)a0)->uid;
             if (uid > 0) {
@@ -336,14 +345,14 @@ jl_lambda_info_t *jl_method_cache_insert(jl_methtable_t *mt, jl_tupletype_t *typ
                 goto ml_do_insert;
             }
         }
-        if (jl_is_datatype(t0))
-            uid = ((jl_datatype_t*)t0)->uid;
+        if (jl_is_datatype(t1))
+            uid = ((jl_datatype_t*)t1)->uid;
         if (uid > 0) {
             if (mt->cache_arg1 == (void*)jl_nothing) {
                 mt->cache_arg1 = jl_alloc_cell_1d(16);
                 jl_gc_wb(mt, mt->cache_arg1);
             }
-            pml = mtcache_hash_bp(&mt->cache_arg1, t0, 0, (jl_value_t*)mt);
+            pml = mtcache_hash_bp(&mt->cache_arg1, t1, 0, (jl_value_t*)mt);
             cache_array = (jl_value_t*)mt->cache_arg1;
         }
     }
@@ -1810,7 +1819,7 @@ static void show_call(jl_value_t *F, jl_value_t **args, uint32_t nargs)
 }
 #endif
 
-DLLEXPORT jl_value_t *jl_apply_generic(jl_value_t **args, uint32_t nargs)
+JL_DLLEXPORT jl_value_t *jl_apply_generic(jl_value_t **args, uint32_t nargs)
 {
     jl_value_t *F = args[0];
     jl_methtable_t *mt = jl_gf_mtable(F);
@@ -1991,17 +2000,30 @@ void print_func_loc(JL_STREAM *s, jl_lambda_info_t *li)
     }
 }
 
-DLLEXPORT jl_function_t *jl_new_generic_function(jl_sym_t *name, jl_module_t *module)
+JL_DLLEXPORT jl_function_t *jl_new_generic_function_with_supertype(jl_sym_t *name, jl_module_t *module, jl_datatype_t *st)
 {
-    jl_datatype_t *ftype = jl_new_datatype(name, jl_function_type, jl_emptysvec,
-                                           jl_emptysvec, jl_emptysvec, 0, 0, 0);
+    // type name is function name prefixed with #
+    size_t l = strlen(jl_symbol_name(name));
+    char *prefixed = (char*)malloc(l+2);
+    prefixed[0] = '#';
+    strcpy(&prefixed[1], jl_symbol_name(name));
+    jl_sym_t *tname = jl_symbol(prefixed);
+    free(prefixed);
+    jl_datatype_t *ftype = jl_new_datatype(tname, st, jl_emptysvec, jl_emptysvec, jl_emptysvec, 0, 0, 0);
     JL_GC_PUSH1(&ftype);
+    ftype->name->mt->name = name;
     ftype->name->module = module;
     ftype->name->mt->module = module;
+    jl_set_const(module, tname, (jl_value_t*)ftype);
     jl_value_t *f = jl_new_struct(ftype);
     ftype->instance = f; jl_gc_wb(ftype, f);
     JL_GC_POP();
     return (jl_function_t*)f;
+}
+
+JL_DLLEXPORT jl_function_t *jl_new_generic_function(jl_sym_t *name, jl_module_t *module)
+{
+    return jl_new_generic_function_with_supertype(name, module, jl_function_type);
 }
 
 void jl_add_method_to_table(jl_methtable_t *mt, jl_tupletype_t *types, jl_lambda_info_t *meth,
