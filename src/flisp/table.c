@@ -12,8 +12,9 @@
 extern "C" {
 #endif
 
-static value_t tablesym;
-static fltype_t *tabletype;
+#define fl_tablesym fl_global_ctx->tablesym
+#define fl_tabletype fl_global_ctx->tabletype
+#define fl_table_vtable fl_global_ctx->table_vtable
 
 void print_htable(value_t v, ios_t *f)
 {
@@ -64,12 +65,9 @@ void relocate_htable(value_t oldv, value_t newv)
     }
 }
 
-cvtable_t table_vtable = { print_htable, relocate_htable, free_htable,
-                           print_traverse_htable };
-
 int ishashtable(value_t v)
 {
-    return iscvalue(v) && cv_class((cvalue_t*)ptr(v)) == tabletype;
+    return iscvalue(v) && cv_class((cvalue_t*)ptr(v)) == fl_tabletype;
 }
 
 value_t fl_tablep(value_t *args, uint32_t nargs)
@@ -89,16 +87,16 @@ value_t fl_table(value_t *args, uint32_t nargs)
 {
     size_t cnt = (size_t)nargs;
     if (cnt & 1)
-        lerror(ArgError, "table: arguments must come in pairs");
+        lerror(fl_ArgError, "table: arguments must come in pairs");
     value_t nt;
     // prevent small tables from being added to finalizer list
     if (cnt <= HT_N_INLINE) {
-        tabletype->vtable->finalize = NULL;
-        nt = cvalue(tabletype, sizeof(htable_t));
-        tabletype->vtable->finalize = free_htable;
+        fl_table_vtable.finalize = NULL;
+        nt = cvalue(fl_tabletype, sizeof(htable_t));
+        fl_table_vtable.finalize = free_htable;
     }
     else {
-        nt = cvalue(tabletype, 2*sizeof(void*));
+        nt = cvalue(fl_tabletype, 2*sizeof(void*));
     }
     htable_t *h = (htable_t*)cv_data((cvalue_t*)ptr(nt));
     htable_new(h, cnt/2);
@@ -131,7 +129,7 @@ value_t fl_table_put(value_t *args, uint32_t nargs)
 
 static void key_error(char *fname, value_t key)
 {
-    lerrorf(fl_list2(KeyError, key), "%s: key not found", fname);
+    lerrorf(fl_list2(fl_KeyError, key), "%s: key not found", fname);
 }
 
 // (get table key [default])
@@ -186,7 +184,7 @@ value_t fl_table_foldl(value_t *args, uint32_t nargs)
             // reload pointer
             h = (htable_t*)cv_data((cvalue_t*)ptr(t));
             if (h->size != n)
-                lerror(EnumerationError, "table.foldl: table modified");
+                lerror(fl_EnumerationError, "table.foldl: table modified");
             table = h->table;
         }
     }
@@ -194,7 +192,7 @@ value_t fl_table_foldl(value_t *args, uint32_t nargs)
     return zero;
 }
 
-static builtinspec_t tablefunc_info[] = {
+static const builtinspec_t tablefunc_info[] = {
     { "table", fl_table },
     { "table?", fl_tablep },
     { "put!", fl_table_put },
@@ -207,9 +205,14 @@ static builtinspec_t tablefunc_info[] = {
 
 void table_init(void)
 {
-    tablesym = symbol("table");
-    tabletype = define_opaque_type(tablesym, sizeof(htable_t),
-                                   &table_vtable, NULL);
+    fl_table_vtable.print = print_htable;
+    fl_table_vtable.relocate = relocate_htable;
+    fl_table_vtable.finalize = free_htable;
+    fl_table_vtable.print_traverse = print_traverse_htable;
+
+    fl_tablesym = symbol("table");
+    fl_tabletype = define_opaque_type(fl_tablesym, sizeof(htable_t),
+                                      &fl_table_vtable, NULL);
     assign_global_builtins(tablefunc_info);
 }
 

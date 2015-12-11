@@ -68,15 +68,15 @@ value_t fl_string(value_t *args, u_int32_t nargs)
     fl_gc_handle(&buf);
     ios_t *s = value2c(ios_t*,buf);
     uint32_t i;
-    value_t oldpr = symbol_value(printreadablysym);
-    value_t oldpp = symbol_value(printprettysym);
-    set(printreadablysym, FL_F);
-    set(printprettysym, FL_F);
+    value_t oldpr = symbol_value(fl_printreadablysym);
+    value_t oldpp = symbol_value(fl_printprettysym);
+    set(fl_printreadablysym, FL_F);
+    set(fl_printprettysym, FL_F);
     FOR_ARGS(i,0,arg,args) {
         fl_print(s, args[i]);
     }
-    set(printreadablysym, oldpr);
-    set(printprettysym, oldpp);
+    set(fl_printreadablysym, oldpr);
+    set(fl_printprettysym, oldpp);
     value_t outp = stream_to_string(&buf);
     fl_free_gc_handles(1);
     return outp;
@@ -146,14 +146,14 @@ value_t fl_string_find(value_t *args, u_int32_t nargs)
 
     value_t v = args[1];
     cprim_t *cp = (cprim_t*)ptr(v);
-    if (iscprim(v) && cp_class(cp) == wchartype) {
+    if (iscprim(v) && cp_class(cp) == fl_wchartype) {
         uint32_t c = *(uint32_t*)cp_data(cp);
         if (c <= 0x7f)
             return mem_find_byte(s, (char)c, start, len);
         needlesz = u8_toutf8(cbuf, sizeof(cbuf), &c, 1);
         needle = cbuf;
     }
-    else if (iscprim(v) && cp_class(cp) == bytetype) {
+    else if (iscprim(v) && cp_class(cp) == fl_bytetype) {
         return mem_find_byte(s, *(char*)cp_data(cp), start, len);
     }
     else if (fl_isstring(v)) {
@@ -223,7 +223,7 @@ static unsigned long get_radix_arg(value_t arg, char *fname)
 {
     unsigned long radix = (unsigned long)tosize(arg, fname);
     if (radix < 2 || radix > 36)
-        lerrorf(ArgError, "%s: invalid radix", fname);
+        lerrorf(fl_ArgError, "%s: invalid radix", fname);
     return radix;
 }
 
@@ -274,7 +274,7 @@ value_t fl_string_isutf8(value_t *args, u_int32_t nargs)
     return u8_isvalid(s, len) ? FL_T : FL_F;
 }
 
-static builtinspec_t stringfunc_info[] = {
+static const builtinspec_t stringfunc_info[] = {
     { "string", fl_string },
     { "string?", fl_stringp },
     { "string.count", fl_string_count },

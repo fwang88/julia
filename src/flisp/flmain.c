@@ -24,9 +24,12 @@ static value_t argv_list(int argc, char *argv[])
 
 extern value_t fl_file(value_t *args, uint32_t nargs);
 
+static fl_global_context_t _fl_global_ctx;
+
 int main(int argc, char *argv[])
 {
     char fname_buf[1024];
+    fl_global_ctx = &_fl_global_ctx;
 
     fl_init(512*1024);
 

@@ -11,9 +11,14 @@
 extern "C" {
 #endif
 
-static value_t iostreamsym, rdsym, wrsym, apsym, crsym, truncsym;
-static value_t instrsym, outstrsym;
-fltype_t *iostreamtype;
+#define fl_iostreamsym fl_global_ctx->iostreamsym
+#define fl_rdsym fl_global_ctx->rdsym
+#define fl_wrsym fl_global_ctx->wrsym
+#define fl_apsym fl_global_ctx->apsym
+#define fl_crsym fl_global_ctx->crsym
+#define fl_truncsym fl_global_ctx->truncsym
+#define fl_instrsym fl_global_ctx->instrsym
+#define fl_outstrsym fl_global_ctx->outstrsym
 
 void print_iostream(value_t v, ios_t *f)
 {
@@ -36,12 +41,12 @@ void relocate_iostream(value_t oldv, value_t newv)
     }
 }
 
-cvtable_t iostream_vtable = { print_iostream, relocate_iostream,
-                              free_iostream, NULL };
+const cvtable_t iostream_vtable = { print_iostream, relocate_iostream,
+                                    free_iostream, NULL };
 
 int fl_isiostream(value_t v)
 {
-    return iscvalue(v) && cv_class((cvalue_t*)ptr(v)) == iostreamtype;
+    return iscvalue(v) && cv_class((cvalue_t*)ptr(v)) == fl_iostreamtype;
 }
 
 value_t fl_iostreamp(value_t *args, uint32_t nargs)
@@ -81,18 +86,18 @@ value_t fl_file(value_t *args, uint32_t nargs)
         argcount("file", nargs, 1);
     int i, r=0, w=0, c=0, t=0, a=0;
     for(i=1; i < (int)nargs; i++) {
-        if      (args[i] == wrsym)    w = 1;
-        else if (args[i] == apsym)    { a = 1; w = 1; }
-        else if (args[i] == crsym)    { c = 1; w = 1; }
-        else if (args[i] == truncsym) { t = 1; w = 1; }
-        else if (args[i] == rdsym)    r = 1;
+        if      (args[i] == fl_wrsym)    w = 1;
+        else if (args[i] == fl_apsym)    { a = 1; w = 1; }
+        else if (args[i] == fl_crsym)    { c = 1; w = 1; }
+        else if (args[i] == fl_truncsym) { t = 1; w = 1; }
+        else if (args[i] == fl_rdsym)    r = 1;
     }
     if ((r|w|c|t|a) == 0) r = 1;  // default to reading
-    value_t f = cvalue(iostreamtype, sizeof(ios_t));
+    value_t f = cvalue(fl_iostreamtype, sizeof(ios_t));
     char *fname = tostring(args[0], "file");
     ios_t *s = value2c(ios_t*, f);
     if (ios_file(s, fname, r, w, c, t) == NULL)
-        lerrorf(IOError, "file: could not open \"%s\"", fname);
+        lerrorf(fl_IOError, "file: could not open \"%s\"", fname);
     if (a) ios_seek_end(s);
     return f;
 }
@@ -101,10 +106,10 @@ value_t fl_buffer(value_t *args, u_int32_t nargs)
 {
     argcount("buffer", nargs, 0);
     (void)args;
-    value_t f = cvalue(iostreamtype, sizeof(ios_t));
+    value_t f = cvalue(fl_iostreamtype, sizeof(ios_t));
     ios_t *s = value2c(ios_t*, f);
     if (ios_mem(s, 0) == NULL)
-        lerror(OutOfMemoryError, "buffer: could not allocate stream");
+        lerror(fl_OutOfMemoryError, "buffer: could not allocate stream");
     return f;
 }
 
@@ -115,7 +120,7 @@ value_t fl_read(value_t *args, u_int32_t nargs)
         argcount("read", nargs, 1);
     }
     else if (nargs == 0) {
-        arg = symbol_value(instrsym);
+        arg = symbol_value(fl_instrsym);
     }
     else {
         arg = args[0];
@@ -154,7 +159,7 @@ value_t fl_ioputc(value_t *args, u_int32_t nargs)
 {
     argcount("io.putc", nargs, 2);
     ios_t *s = toiostream(args[0], "io.putc");
-    if (!iscprim(args[1]) || ((cprim_t*)ptr(args[1]))->type != wchartype)
+    if (!iscprim(args[1]) || ((cprim_t*)ptr(args[1]))->type != fl_wchartype)
         type_error("io.putc", "wchar", args[1]);
     uint32_t wc = *(uint32_t*)cp_data((cprim_t*)ptr(args[1]));
     return fixnum(ios_pututf8(s, wc));
@@ -164,11 +169,11 @@ value_t fl_ioungetc(value_t *args, u_int32_t nargs)
 {
     argcount("io.ungetc", nargs, 2);
     ios_t *s = toiostream(args[0], "io.ungetc");
-    if (!iscprim(args[1]) || ((cprim_t*)ptr(args[1]))->type != wchartype)
+    if (!iscprim(args[1]) || ((cprim_t*)ptr(args[1]))->type != fl_wchartype)
         type_error("io.ungetc", "wchar", args[1]);
     uint32_t wc = *(uint32_t*)cp_data((cprim_t*)ptr(args[1]));
     if (wc >= 0x80) {
-        lerror(ArgError, "io_ungetc: unicode not yet supported");
+        lerror(fl_ArgError, "io_ungetc: unicode not yet supported");
     }
     return fixnum(ios_ungetc((int)wc,s));
 }
@@ -241,7 +246,7 @@ value_t fl_write(value_t *args, u_int32_t nargs)
     if (nargs == 2)
         s = toiostream(args[1], "write");
     else
-        s = toiostream(symbol_value(outstrsym), "write");
+        s = toiostream(symbol_value(fl_outstrsym), "write");
     fl_print(s, args[0]);
     return args[0];
 }
@@ -261,7 +266,7 @@ value_t fl_ioread(value_t *args, u_int32_t nargs)
     else {
         ft = get_type(args[1]);
         if (ft->eltype != NULL && !iscons(cdr_(cdr_(args[1]))))
-            lerror(ArgError, "io.read: incomplete type");
+            lerror(fl_ArgError, "io.read: incomplete type");
         n = ft->size;
     }
     value_t cv = cvalue(ft, n);
@@ -295,9 +300,9 @@ value_t fl_iowrite(value_t *args, u_int32_t nargs)
     if (nargs < 2 || nargs > 4)
         argcount("io.write", nargs, 2);
     ios_t *s = toiostream(args[0], "io.write");
-    if (iscprim(args[1]) && ((cprim_t*)ptr(args[1]))->type == wchartype) {
+    if (iscprim(args[1]) && ((cprim_t*)ptr(args[1]))->type == fl_wchartype) {
         if (nargs > 2)
-            lerror(ArgError,
+            lerror(fl_ArgError,
                    "io.write: offset argument not supported for characters");
         uint32_t wc = *(uint32_t*)cp_data((cprim_t*)ptr(args[1]));
         return fixnum(ios_pututf8(s, wc));
@@ -318,9 +323,9 @@ static char get_delim_arg(value_t arg, char *fname)
     size_t uldelim = tosize(arg, fname);
     if (uldelim > 0x7f) {
         // wchars > 0x7f, or anything else > 0xff, are out of range
-        if ((iscprim(arg) && cp_class((cprim_t*)ptr(arg))==wchartype) ||
+        if ((iscprim(arg) && cp_class((cprim_t*)ptr(arg))==fl_wchartype) ||
             uldelim > 0xff)
-            lerrorf(ArgError, "%s: delimiter out of range", fname);
+            lerrorf(fl_ArgError, "%s: delimiter out of range", fname);
     }
     return (char)uldelim;
 }
@@ -386,7 +391,7 @@ value_t stream_to_string(value_t *ps)
     else {
         char *b = ios_takebuf(st, &n); n--;
         b[n] = '\0';
-        str = cvalue_from_ref(stringtype, b, n, FL_NIL);
+        str = cvalue_from_ref(fl_stringtype, b, n, FL_NIL);
         cv_autorelease((cvalue_t*)ptr(str));
     }
     return str;
@@ -397,11 +402,11 @@ value_t fl_iotostring(value_t *args, u_int32_t nargs)
     argcount("io.tostring!", nargs, 1);
     ios_t *src = toiostream(args[0], "io.tostring!");
     if (src->bm != bm_mem)
-        lerror(ArgError, "io.tostring!: requires memory stream");
+        lerror(fl_ArgError, "io.tostring!: requires memory stream");
     return stream_to_string(&args[0]);
 }
 
-static builtinspec_t iostreamfunc_info[] = {
+static const builtinspec_t iostreamfunc_info[] = {
     { "iostream?", fl_iostreamp },
     { "eof-object", fl_eof_object },
     { "eof-object?", fl_eof_objectp },
@@ -432,23 +437,23 @@ static builtinspec_t iostreamfunc_info[] = {
 
 void iostream_init(void)
 {
-    iostreamsym = symbol("iostream");
-    rdsym = symbol(":read");
-    wrsym = symbol(":write");
-    apsym = symbol(":append");
-    crsym = symbol(":create");
-    truncsym = symbol(":truncate");
-    instrsym = symbol("*input-stream*");
-    outstrsym = symbol("*output-stream*");
-    iostreamtype = define_opaque_type(iostreamsym, sizeof(ios_t),
-                                      &iostream_vtable, NULL);
+    fl_iostreamsym = symbol("iostream");
+    fl_rdsym = symbol(":read");
+    fl_wrsym = symbol(":write");
+    fl_apsym = symbol(":append");
+    fl_crsym = symbol(":create");
+    fl_truncsym = symbol(":truncate");
+    fl_instrsym = symbol("*input-stream*");
+    fl_outstrsym = symbol("*output-stream*");
+    fl_iostreamtype = define_opaque_type(fl_iostreamsym, sizeof(ios_t),
+                                         &iostream_vtable, NULL);
     assign_global_builtins(iostreamfunc_info);
 
-    setc(symbol("*stdout*"), cvalue_from_ref(iostreamtype, ios_stdout,
+    setc(symbol("*stdout*"), cvalue_from_ref(fl_iostreamtype, ios_stdout,
                                              sizeof(ios_t), FL_NIL));
-    setc(symbol("*stderr*"), cvalue_from_ref(iostreamtype, ios_stderr,
+    setc(symbol("*stderr*"), cvalue_from_ref(fl_iostreamtype, ios_stderr,
                                              sizeof(ios_t), FL_NIL));
-    setc(symbol("*stdin*" ), cvalue_from_ref(iostreamtype, ios_stdin,
+    setc(symbol("*stdin*" ), cvalue_from_ref(fl_iostreamtype, ios_stdin,
                                              sizeof(ios_t), FL_NIL));
 }
 

@@ -139,7 +139,7 @@ JL_DLLEXPORT int jl_id_char(uint32_t wc)
 value_t fl_julia_identifier_char(value_t *args, u_int32_t nargs)
 {
     argcount("identifier-char?", nargs, 1);
-    if (!iscprim(args[0]) || ((cprim_t*)ptr(args[0]))->type != wchartype)
+    if (!iscprim(args[0]) || ((cprim_t*)ptr(args[0]))->type != fl_wchartype)
         type_error("identifier-char?", "wchar", args[0]);
     uint32_t wc = *(uint32_t*)cp_data((cprim_t*)ptr(args[0]));
     return jl_id_char(wc) ? FL_T : FL_F;
@@ -148,7 +148,7 @@ value_t fl_julia_identifier_char(value_t *args, u_int32_t nargs)
 value_t fl_julia_identifier_start_char(value_t *args, u_int32_t nargs)
 {
     argcount("identifier-start-char?", nargs, 1);
-    if (!iscprim(args[0]) || ((cprim_t*)ptr(args[0]))->type != wchartype)
+    if (!iscprim(args[0]) || ((cprim_t*)ptr(args[0]))->type != fl_wchartype)
         type_error("identifier-start-char?", "wchar", args[0]);
     uint32_t wc = *(uint32_t*)cp_data((cprim_t*)ptr(args[0]));
     return jl_id_start_char(wc) ? FL_T : FL_F;
@@ -157,6 +157,7 @@ value_t fl_julia_identifier_start_char(value_t *args, u_int32_t nargs)
 // return NFC-normalized UTF8-encoded version of s
 static char *normalize(char *s)
 {
+    // These temporary buffers shouldn't be needed across context switches.
     static size_t buflen = 0;
     static void *buf = NULL; // persistent buffer (avoid repeated malloc/free)
     // options equivalent to utf8proc_NFC:
@@ -169,7 +170,7 @@ static char *normalize(char *s)
     if (newlen > buflen) {
         buflen = newlen * 2;
         buf = realloc(buf, buflen);
-        if (!buf) lerror(OutOfMemoryError, "error allocating UTF8 buffer");
+        if (!buf) lerror(fl_OutOfMemoryError, "error allocating UTF8 buffer");
     }
     result = utf8proc_decompose((uint8_t*)s,0, (int32_t*)buf,result, (utf8proc_option_t)options);
     if (result < 0) goto error;
@@ -185,7 +186,7 @@ value_t fl_accum_julia_symbol(value_t *args, u_int32_t nargs)
 {
     argcount("accum-julia-symbol", nargs, 2);
     ios_t *s = fl_toiostream(args[1], "accum-julia-symbol");
-    if (!iscprim(args[0]) || ((cprim_t*)ptr(args[0]))->type != wchartype)
+    if (!iscprim(args[0]) || ((cprim_t*)ptr(args[0]))->type != fl_wchartype)
         type_error("accum-julia-symbol", "wchar", args[0]);
     uint32_t wc = *(uint32_t*)cp_data((cprim_t*)ptr(args[0]));
     ios_t str;
@@ -209,7 +210,7 @@ value_t fl_accum_julia_symbol(value_t *args, u_int32_t nargs)
     return symbol(normalize(str.buf));
 }
 
-static builtinspec_t julia_flisp_func_info[] = {
+static const builtinspec_t julia_flisp_func_info[] = {
     { "skip-ws", fl_skipws },
     { "accum-julia-symbol", fl_accum_julia_symbol },
     { "identifier-char?", fl_julia_identifier_char },

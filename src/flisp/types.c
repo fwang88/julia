@@ -8,11 +8,11 @@ fltype_t *get_type(value_t t)
         if (ft != NULL)
             return ft;
     }
-    void **bp = equalhash_bp(&TypeTable, (void*)t);
+    void **bp = equalhash_bp(&fl_TypeTable, (void*)t);
     if (*bp != HT_NOTFOUND)
         return (fltype_t*)*bp;
 
-    int align, isarray=(iscons(t) && car_(t) == arraysym && iscons(cdr_(t)));
+    int align, isarray=(iscons(t) && car_(t) == fl_arraysym && iscons(cdr_(t)));
     size_t sz;
     if (isarray && !iscons(cdr_(cdr_(t)))) {
         // special case: incomplete array type
@@ -43,7 +43,7 @@ fltype_t *get_type(value_t t)
             fltype_t *eltype = get_type(car_(cdr_(t)));
             if (eltype->size == 0) {
                 free(ft);
-                lerror(ArgError, "invalid array element type");
+                lerror(fl_ArgError, "invalid array element type");
             }
             ft->elsz = eltype->size;
             ft->eltype = eltype;
@@ -60,10 +60,10 @@ fltype_t *get_array_type(value_t eltype)
     fltype_t *et = get_type(eltype);
     if (et->artype != NULL)
         return et->artype;
-    return get_type(fl_list2(arraysym, eltype));
+    return get_type(fl_list2(fl_arraysym, eltype));
 }
 
-fltype_t *define_opaque_type(value_t sym, size_t sz, cvtable_t *vtab,
+fltype_t *define_opaque_type(value_t sym, size_t sz, const cvtable_t *vtab,
                              cvinitfunc_t init)
 {
     fltype_t *ft = (fltype_t*)malloc(sizeof(fltype_t));
@@ -81,7 +81,7 @@ fltype_t *define_opaque_type(value_t sym, size_t sz, cvtable_t *vtab,
 
 void relocate_typetable(void)
 {
-    htable_t *h = &TypeTable;
+    htable_t *h = &fl_TypeTable;
     size_t i;
     void *nv;
     for(i=0; i < h->size; i+=2) {

@@ -97,9 +97,9 @@ static value_t fl_length(value_t *args, u_int32_t nargs)
     }
     else if (iscprim(a)) {
         cv = (cvalue_t*)ptr(a);
-        if (cp_class(cv) == bytetype)
+        if (cp_class(cv) == fl_bytetype)
             return fixnum(1);
-        else if (cp_class(cv) == wchartype)
+        else if (cp_class(cv) == fl_wchartype)
             return fixnum(u8_charlen(*(uint32_t*)cp_data((cprim_t*)cv)));
     }
     else if (iscvalue(a)) {
@@ -150,7 +150,7 @@ static value_t fl_top_level_value(value_t *args, u_int32_t nargs)
     argcount("top-level-value", nargs, 1);
     symbol_t *sym = tosymbol(args[0], "top-level-value");
     if (sym->binding == UNBOUND)
-        fl_raise(fl_list2(UnboundError, args[0]));
+        fl_raise(fl_list2(fl_UnboundError, args[0]));
     return sym->binding;
 }
 
@@ -174,20 +174,16 @@ static void global_env_list(symbol_t *root, value_t *pv)
     }
 }
 
-extern symbol_t *symtab;
-
 value_t fl_global_env(value_t *args, u_int32_t nargs)
 {
     (void)args;
     argcount("environment", nargs, 0);
     value_t lst = FL_NIL;
     fl_gc_handle(&lst);
-    global_env_list(symtab, &lst);
+    global_env_list(fl_symtab, &lst);
     fl_free_gc_handles(1);
     return lst;
 }
-
-extern value_t QUOTE;
 
 static value_t fl_constantp(value_t *args, u_int32_t nargs)
 {
@@ -195,7 +191,7 @@ static value_t fl_constantp(value_t *args, u_int32_t nargs)
     if (issymbol(args[0]))
         return (isconstant((symbol_t*)ptr(args[0])) ? FL_T : FL_F);
     if (iscons(args[0])) {
-        if (car_(args[0]) == QUOTE)
+        if (car_(args[0]) == FL_QUOTE)
             return FL_T;
         return FL_F;
     }
@@ -286,10 +282,10 @@ static value_t fl_vector_alloc(value_t *args, u_int32_t nargs)
     fixnum_t i;
     value_t f, v;
     if (nargs == 0)
-        lerror(ArgError, "vector.alloc: too few arguments");
+        lerror(fl_ArgError, "vector.alloc: too few arguments");
     i = (fixnum_t)tosize(args[0], "vector.alloc");
     if (i < 0)
-        lerror(ArgError, "vector.alloc: invalid size");
+        lerror(fl_ArgError, "vector.alloc: invalid size");
     if (nargs == 2)
         f = args[1];
     else
@@ -320,13 +316,13 @@ static value_t fl_path_cwd(value_t *args, uint32_t nargs)
         size_t len = sizeof(buf);
         err = uv_cwd(buf, &len);
         if (err != 0)
-            lerrorf(IOError, "path.cwd: could not get cwd: %s", uv_strerror(err));
+            lerrorf(fl_IOError, "path.cwd: could not get cwd: %s", uv_strerror(err));
         return string_from_cstr(buf);
     }
     char *ptr = tostring(args[0], "path.cwd");
     err = uv_chdir(ptr);
     if (err != 0)
-        lerrorf(IOError, "path.cwd: could not cd to %s: %s", ptr, uv_strerror(err));
+        lerrorf(fl_IOError, "path.cwd: could not cd to %s: %s", ptr, uv_strerror(err));
     return FL_T;
 }
 
@@ -347,7 +343,7 @@ static value_t fl_os_getenv(value_t *args, uint32_t nargs)
     char *val = getenv(name);
     if (val == NULL) return FL_F;
     if (*val == 0)
-        return symbol_value(emptystringsym);
+        return symbol_value(fl_emptystringsym);
     return cvalue_static_cstring(val);
 }
 
@@ -376,7 +372,7 @@ static value_t fl_os_setenv(value_t *args, uint32_t nargs)
 #endif
     }
     if (result != 0)
-        lerror(ArgError, "os.setenv: invalid environment variable");
+        lerror(fl_ArgError, "os.setenv: invalid environment variable");
     return FL_T;
 }
 
@@ -384,7 +380,7 @@ extern void stringfuncs_init(void);
 extern void table_init(void);
 extern void iostream_init(void);
 
-static builtinspec_t builtin_info[] = {
+static const builtinspec_t builtin_info[] = {
     { "environment", fl_global_env },
     { "constant?", fl_constantp },
     { "top-level-value", fl_top_level_value },

@@ -108,7 +108,7 @@ value_t fl_invoke_julia_macro(value_t *args, uint32_t nargs)
     return scmresult;
 }
 
-static builtinspec_t julia_flisp_ast_ext[] = {
+static const builtinspec_t julia_flisp_ast_ext[] = {
     { "defined-julia-global", fl_defined_julia_global },
     { "invoke-julia-macro", fl_invoke_julia_macro },
     { "current-julia-module", fl_current_julia_module },
@@ -119,6 +119,9 @@ extern int jl_parse_deperror(int err);
 
 void jl_init_frontend(void)
 {
+    static fl_global_context_t _fl_global_ctx;
+    fl_global_ctx = &_fl_global_ctx;
+
     fl_init(4*1024*1024);
 
     if (fl_load_system_image_str((char*)flisp_system_image,
@@ -128,8 +131,7 @@ void jl_init_frontend(void)
 
     fl_applyn(0, symbol_value(symbol("__init_globals")));
 
-    jvtype = define_opaque_type(symbol("julia_value"), sizeof(void*),
-                                NULL, NULL);
+    jvtype = define_opaque_type(fl_jl_sym, sizeof(void*), NULL, NULL);
 
     assign_global_builtins(julia_flisp_ast_ext);
     true_sym = symbol("true");
@@ -390,7 +392,7 @@ static jl_value_t *scm_to_julia_(value_t e, int eo)
             jl_error("malformed tree");
         }
     }
-    if (iscprim(e) && cp_class((cprim_t*)ptr(e))==wchartype) {
+    if (iscprim(e) && cp_class((cprim_t*)ptr(e)) == fl_wchartype) {
         jl_value_t *wc =
             jl_box32(jl_char_type, *(int32_t*)cp_data((cprim_t*)ptr(e)));
         return wc;
@@ -427,7 +429,7 @@ static value_t julia_to_scm(jl_value_t *v)
 static void array_to_list(jl_array_t *a, value_t *pv)
 {
     if (jl_array_len(a) > 300000)
-        lerror(OutOfMemoryError, "expression too large");
+        lerror(fl_OutOfMemoryError, "expression too large");
     value_t temp;
     for(long i=jl_array_len(a)-1; i >= 0; i--) {
         *pv = fl_cons(FL_NIL, *pv);

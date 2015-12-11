@@ -114,14 +114,14 @@ typedef struct {
 #ifdef MEMDEBUG2
 #define ismanaged(v) (!issymbol(v) && !isfixnum(v) && ((v)>(N_OPCODES<<3)) && !iscbuiltin(v))
 #else
-#define ismanaged(v) ((((unsigned char*)ptr(v)) >= fromspace) && \
-                      (((unsigned char*)ptr(v)) < fromspace+heapsize))
+#define ismanaged(v) ((((unsigned char*)ptr(v)) >= fl_fromspace) && \
+                      (((unsigned char*)ptr(v)) < fl_fromspace+fl_heapsize))
 #endif
 #define isgensym(x)  (issymbol(x) && ismanaged(x))
 
 #define isfunction(x) (tag(x) == TAG_FUNCTION && (x) > (N_BUILTINS<<3))
 #define isclosure(x) isfunction(x)
-#define iscbuiltin(x) (iscvalue(x) && (cv_class((cvalue_t*)ptr(x))==builtintype))
+#define iscbuiltin(x) (iscvalue(x) && (cv_class((cvalue_t*)ptr(x))==fl_builtintype))
 
 void fl_gc_handle(value_t *pv);
 void fl_free_gc_handles(uint32_t n);
@@ -136,8 +136,6 @@ void fl_free_gc_handles(uint32_t n);
 
 #define N_BUILTINS ((int)N_OPCODES)
 
-extern value_t FL_NIL, FL_T, FL_F, FL_EOF;
-
 #define FL_UNSPECIFIED FL_T
 
 /* read, eval, print main entry points */
@@ -146,8 +144,6 @@ void fl_print(ios_t *f, value_t v);
 value_t fl_toplevel_eval(value_t expr);
 value_t fl_apply(value_t f, value_t l);
 value_t fl_applyn(uint32_t n, value_t f, ...);
-
-extern value_t printprettysym, printreadablysym, printwidthsym;
 
 /* object model manipulation */
 value_t fl_cons(value_t a, value_t b);
@@ -180,10 +176,6 @@ typedef struct _ectx_t {
     struct _ectx_t *prev;
 } fl_exception_context_t;
 
-extern fl_exception_context_t *fl_ctx;
-extern uint32_t fl_throwing_frame;
-extern value_t fl_lasterror;
-
 #define FL_TRY_EXTERN                                                   \
   fl_exception_context_t _ctx; int l__tr, l__ca;                        \
   fl_savestate(&_ctx); fl_ctx = &_ctx;                                  \
@@ -211,15 +203,6 @@ void bounds_error(char *fname, value_t arr, value_t ind) __attribute__ ((__noret
 void fl_savestate(fl_exception_context_t *_ctx);
 void fl_restorestate(fl_exception_context_t *_ctx);
 
-extern value_t ArgError, IOError, KeyError, OutOfMemoryError, EnumerationError;
-extern value_t UnboundError;
-
-static inline void argcount(char *fname, uint32_t nargs, uint32_t c)
-{
-    if (__unlikely(nargs != c))
-        lerrorf(ArgError,"%s: too %s arguments", fname, nargs<c ? "few":"many");
-}
-
 typedef struct {
     void (*print)(value_t self, ios_t *f);
     void (*relocate)(value_t oldv, value_t newv);
@@ -241,7 +224,7 @@ typedef struct _fltype_t {
     numerictype_t numtype;
     size_t size;
     size_t elsz;
-    cvtable_t *vtable;
+    const cvtable_t *vtable;
     struct _fltype_t *eltype;  // for arrays
     struct _fltype_t *artype;  // (array this)
     int marked;
@@ -284,7 +267,7 @@ typedef struct {
 #define cv_len(cv)     ((cv)->len)
 #define cv_type(cv)    (cv_class(cv)->type)
 #define cv_data(cv)    ((cv)->data)
-#define cv_isstr(cv)   (cv_class(cv)->eltype == bytetype)
+#define cv_isstr(cv)   (cv_class(cv)->eltype == fl_bytetype)
 #define cv_isPOD(cv)   (cv_class(cv)->init != NULL)
 
 #define cvalue_data(v) cv_data((cvalue_t*)ptr(v))
@@ -319,17 +302,6 @@ typedef float    fl_float_t;
 
 typedef value_t (*builtin_t)(value_t*, uint32_t);
 
-extern value_t QUOTE;
-extern value_t int8sym, uint8sym, int16sym, uint16sym, int32sym, uint32sym;
-extern value_t int64sym, uint64sym;
-extern value_t ptrdiffsym, sizesym, bytesym, wcharsym;
-extern value_t arraysym, cfunctionsym, voidsym, pointersym;
-extern value_t stringtypesym, wcstringtypesym, emptystringsym;
-extern value_t floatsym, doublesym;
-extern fltype_t *bytetype, *wchartype;
-extern fltype_t *stringtype, *wcstringtype;
-extern fltype_t *builtintype;
-
 value_t cvalue(fltype_t *type, size_t sz);
 void add_finalizer(cvalue_t *cv);
 void cv_autorelease(cvalue_t *cv);
@@ -359,7 +331,7 @@ void to_sized_ptr(value_t v, char *fname, char **pdata, size_t *psz);
 
 fltype_t *get_type(value_t t);
 fltype_t *get_array_type(value_t eltype);
-fltype_t *define_opaque_type(value_t sym, size_t sz, cvtable_t *vtab,
+fltype_t *define_opaque_type(value_t sym, size_t sz, const cvtable_t *vtab,
                              cvinitfunc_t init);
 
 value_t mk_double(fl_double_t n);
@@ -375,7 +347,7 @@ typedef struct {
     builtin_t fptr;
 } builtinspec_t;
 
-void assign_global_builtins(builtinspec_t *b);
+void assign_global_builtins(const builtinspec_t *b);
 
 /* builtins */
 value_t fl_hash(value_t *args, u_int32_t nargs);
@@ -389,6 +361,193 @@ int fl_load_system_image_str(char* str, size_t len);
 /* julia extensions */
 JL_DLLEXPORT int jl_id_char(uint32_t wc);
 JL_DLLEXPORT int jl_id_start_char(uint32_t wc);
+
+typedef struct {
+    symbol_t *symtab;
+    value_t FL_NIL, FL_T, FL_F, FL_EOF, FL_QUOTE;
+    value_t int8sym, uint8sym, int16sym, uint16sym, int32sym, uint32sym;
+    value_t int64sym, uint64sym;
+
+    value_t ptrdiffsym, sizesym, bytesym, wcharsym;
+    value_t floatsym, doublesym;
+    value_t stringtypesym, wcstringtypesym;
+    value_t emptystringsym;
+
+    value_t arraysym, cfunctionsym, voidsym, pointersym;
+
+    htable_t TypeTable;
+    htable_t reverse_dlsym_lookup_table;
+
+    fltype_t *int8type, *uint8type;
+    fltype_t *int16type, *uint16type;
+    fltype_t *int32type, *uint32type;
+    fltype_t *int64type, *uint64type;
+    fltype_t *ptrdifftype, *sizetype;
+    fltype_t *floattype, *doubletype;
+    fltype_t *bytetype, *wchartype;
+    fltype_t *stringtype, *wcstringtype;
+    fltype_t *builtintype;
+
+    htable_t equal_eq_hashtable;
+
+    value_t tablesym;
+    fltype_t *tabletype;
+    cvtable_t table_vtable;
+
+    u_int32_t readtoktype;
+    value_t readtokval;
+    char readbuf[256];
+
+    htable_t printconses;
+    u_int32_t printlabel;
+    int print_pretty;
+    int print_princ;
+    fixnum_t print_length;
+    fixnum_t print_level;
+    fixnum_t P_LEVEL;
+    int SCR_WIDTH;
+    int HPOS, VPOS;
+
+    value_t iostreamsym, rdsym, wrsym, apsym, crsym, truncsym;
+    value_t instrsym, outstrsym;
+    fltype_t *iostreamtype;
+
+    size_t malloc_pressure;
+    cvalue_t **Finalizers;
+    size_t nfinalizers;
+    size_t maxfinalizers;
+
+    uint32_t N_STACK;
+    value_t *Stack;
+    uint32_t SP;
+    uint32_t curr_frame;
+
+#define FL_N_GC_HANDLES 8192
+    value_t *GCHandleStack[FL_N_GC_HANDLES];
+    uint32_t N_GCHND;
+
+    value_t IOError, ParseError, TypeError, ArgError, UnboundError, KeyError;
+    value_t OutOfMemoryError, DivideError, BoundsError, EnumerationError;
+    value_t printwidthsym, printreadablysym, printprettysym, printlengthsym;
+    value_t printlevelsym, builtins_table_sym;
+
+    value_t LAMBDA, IF, TRYCATCH;
+    value_t BACKQUOTE, COMMA, COMMAAT, COMMADOT, FUNCTION;
+
+    value_t pairsym, symbolsym, fixnumsym, vectorsym, builtinsym, vu8sym;
+    value_t definesym, defmacrosym, forsym, setqsym;
+    value_t tsym, Tsym, fsym, Fsym, booleansym, nullsym, evalsym, fnsym;
+    // for reading characters
+    value_t nulsym, alarmsym, backspacesym, tabsym, linefeedsym, newlinesym;
+    value_t vtabsym, pagesym, returnsym, escsym, spacesym, deletesym;
+
+    struct _fl_readstate_t *readstate;
+
+    unsigned char *fromspace;
+    unsigned char *tospace;
+    unsigned char *curheap;
+    unsigned char *lim;
+    uint32_t heapsize;//bytes
+    uint32_t *consflags;
+
+    // error utilities --------------------------------------------------
+
+    // saved execution state for an unwind target
+    fl_exception_context_t *exc_ctx;
+    uint32_t throwing_frame;  // active frame when exception was thrown
+    value_t lasterror;
+
+    uint32_t gensym_ctr;
+    // two static buffers for gensym printing so there can be two
+    // gensym names available at a time, mostly for compare()
+    char gsname[2][16];
+    int gsnameno;
+
+    void *tochain;
+    long long n_allocd;
+
+    value_t the_empty_vector;
+    value_t memory_exception_value;
+
+    int gc_grew;
+    cons_t *apply_c;
+    value_t *apply_pv;
+    int64_t apply_accum;
+    value_t apply_func, apply_v, apply_e;
+
+    value_t jl_sym;
+} fl_global_context_t;
+
+JL_DLLEXPORT extern fl_global_context_t *pfl_global_ctx;
+#define fl_global_ctx (pfl_global_ctx)
+
+#define fl_symtab fl_global_ctx->symtab
+
+#define FL_NIL fl_global_ctx->FL_NIL
+#define FL_T fl_global_ctx->FL_T
+#define FL_F fl_global_ctx->FL_F
+#define FL_EOF fl_global_ctx->FL_EOF
+#define FL_QUOTE fl_global_ctx->FL_QUOTE
+
+#define fl_int8sym fl_global_ctx->int8sym
+#define fl_uint8sym fl_global_ctx->uint8sym
+#define fl_int16sym fl_global_ctx->int16sym
+#define fl_uint16sym fl_global_ctx->uint16sym
+#define fl_int32sym fl_global_ctx->int32sym
+#define fl_uint32sym fl_global_ctx->uint32sym
+#define fl_int64sym fl_global_ctx->int64sym
+#define fl_uint64sym fl_global_ctx->uint64sym
+
+#define fl_ptrdiffsym fl_global_ctx->ptrdiffsym
+#define fl_sizesym fl_global_ctx->sizesym
+#define fl_bytesym fl_global_ctx->bytesym
+#define fl_wcharsym fl_global_ctx->wcharsym
+#define fl_floatsym fl_global_ctx->floatsym
+#define fl_doublesym fl_global_ctx->doublesym
+#define fl_stringtypesym fl_global_ctx->stringtypesym
+#define fl_wcstringtypesym fl_global_ctx->wcstringtypesym
+#define fl_emptystringsym fl_global_ctx->emptystringsym
+#define fl_arraysym fl_global_ctx->arraysym
+#define fl_cfunctionsym fl_global_ctx->cfunctionsym
+#define fl_voidsym fl_global_ctx->voidsym
+#define fl_pointersym fl_global_ctx->pointersym
+
+#define fl_bytetype fl_global_ctx->bytetype
+#define fl_wchartype fl_global_ctx->wchartype
+#define fl_stringtype fl_global_ctx->stringtype
+#define fl_wcstringtype fl_global_ctx->wcstringtype
+#define fl_builtintype fl_global_ctx->builtintype
+#define fl_iostreamtype fl_global_ctx->iostreamtype
+
+#define fl_IOError fl_global_ctx->IOError
+#define fl_ParseError fl_global_ctx->ParseError
+#define fl_TypeError fl_global_ctx->TypeError
+#define fl_ArgError fl_global_ctx->ArgError
+#define fl_UnboundError fl_global_ctx->UnboundError
+#define fl_OutOfMemoryError fl_global_ctx->OutOfMemoryError
+#define fl_DivideError fl_global_ctx->DivideError
+#define fl_BoundsError fl_global_ctx->BoundsError
+#define fl_KeyError fl_global_ctx->KeyError
+#define fl_EnumerationError fl_global_ctx->EnumerationError
+
+#define fl_printwidthsym fl_global_ctx->printwidthsym
+#define fl_printreadablysym fl_global_ctx->printreadablysym
+#define fl_printprettysym fl_global_ctx->printprettysym
+#define fl_printlengthsym fl_global_ctx->printlengthsym
+#define fl_printlevelsym fl_global_ctx->printlevelsym
+#define fl_builtins_table_sym fl_global_ctx->builtins_table_sym
+
+#define fl_ctx fl_global_ctx->exc_ctx
+#define fl_throwing_frame fl_global_ctx->throwing_frame
+#define fl_lasterror fl_global_ctx->lasterror
+
+#define fl_jl_sym fl_global_ctx->jl_sym
+
+static inline void argcount(char *fname, uint32_t nargs, uint32_t c)
+{
+    if (__unlikely(nargs != c))
+        lerrorf(fl_ArgError,"%s: too %s arguments", fname, nargs<c ? "few":"many");
+}
 
 #ifdef __cplusplus
 }
