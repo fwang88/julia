@@ -305,7 +305,7 @@
            (error "function static parameter names not unique"))
        (if (any (lambda (x) (memq x names)) anames)
            (error "function argument and static parameter names must be distinct")))
-     ;; TODO: this is currently broken by the code in closure-convert that
+     ;; TODO jb/functions: this is currently broken by the code in closure-convert that
      ;; puts a lowered method name expression back into a front-end AST
      #;(if (not (sym-ref? name))
          (error (string "invalid method name \"" (deparse name) "\"")))
@@ -2782,6 +2782,33 @@ So far only the second case can actually occur.
  16. is there a more efficient way to have huge #s of types with only default constructors?
 |#
 
+;; template for generating a closure type with parameters
+(define (type-for-closure-parameterized name P fields types super)
+  (let ((n (length P)))
+    `(thunk
+      (lambda ()
+	((,@(map (lambda (p) `(,p Any 18)) P))
+	 () 0 ())
+	(block (global ,name) (const ,name)
+	       ,@(map (lambda (p) `(= ,p (call (top TypeVar) ',p (top Any) true))) P)
+	       (composite_type ,name (call (top svec) ,@P)
+			       (call (top svec) ,@(map (lambda (v) `',v) fields))
+			       ,super
+			       (call (top svec) ,@types) #f ,(length fields))
+	       (return (null)))))))
+
+;; ... and without parameters
+(define (type-for-closure name fields super)
+  `(thunk (lambda ()
+	    (() () 0 ())
+	    (block (global ,name) (const ,name)
+		   (composite_type ,name (call (top svec))
+				   (call (top svec) ,@(map (lambda (v) `',v) fields))
+				   ,super
+				   (call (top svec) ,@(map (lambda (v) 'Any) fields))
+				   #f ,(length fields))
+		   (return (null))))))
+
 (define (vinfo:not-capt vi)
   (list (car vi) (cadr vi) (logand (caddr vi) (lognot 5))))
 
@@ -2844,7 +2871,7 @@ So far only the second case can actually occur.
 		  (cdddr typapp)))
          (newtypes
           (if iskw
-              `(,(car types) #;(call (call (top getfield) Core 'kwftype) ,typ) ,(cadr types) ,typ ,@(cdddr types))
+              `(,(car types) ,(cadr types) ,typ ,@(cdddr types))
               `(,typ ,@(cdr types)))))
     `(call (top svec) (call (top apply_type) Tuple ,@newtypes)
 	   ,(cadddr te))))
@@ -2897,10 +2924,10 @@ So far only the second case can actually occur.
     lam))
 
 (define (is-var-boxed? v lam)
-  (let ((vi (assq v (car  (lam:vinfo lam))))
-        (cv (assq v (cadr (lam:vinfo lam)))))
-    (or (and cv (vinfo:asgn cv) (vinfo:capt cv))
-        (and vi (vinfo:asgn vi) (vinfo:capt vi)))))
+  (or (let ((vi (assq v (car (lam:vinfo lam)))))
+	(and vi (vinfo:asgn vi) (vinfo:capt vi)))
+      (let ((cv (assq v (cadr (lam:vinfo lam)))))
+	(and cv (vinfo:asgn cv) (vinfo:capt cv)))))
 
 (define (closure-convert e) (cl-convert e #f #f #f #f #f))
 
@@ -3041,32 +3068,32 @@ So far only the second case can actually occur.
                                              identity
                                              (lambda (x) (and (pair? x) (not (eq? (car x) 'lambda)))))))))
                         (typedef  ;; expression to define the type
-                         (let ((fieldtypes (map (lambda (v)
-                                                  (if (is-var-boxed? v lam)
-                                                      'Any ;; TODO
-                                                      (gensy)))
-                                                cvs)))
-                           (cadr
-                            (julia-expand-for-cl-convert
-                             `(thunk
-                               (lambda ()
-                                 (scope-block
-                                  (block (type #f (<: (curly ,tname ,@(filter (lambda (v) (not (eq? v 'Any)))
-                                                                              fieldtypes))
-                                                      (top Function))
-                                               (block ,@(map (lambda (v t)
-                                                               (if (eq? t 'Any)
-                                                                   v
-                                                                   `(|::| ,v ,t)))
-                                                             cvs fieldtypes)))))))))))
+                         (let* ((fieldtypes (map (lambda (v)
+						   (if (is-var-boxed? v lam)
+						       'Any ;; TODO
+						       (gensy)))
+						 cvs))
+				(para (filter (lambda (v) (not (eq? v 'Any))) fieldtypes)))
+			   (if (null? para)
+			       (type-for-closure tname cvs '(top Function))
+			       (type-for-closure-parameterized tname para cvs fieldtypes '(top Function)))))
                         (mk-closure  ;; expression to make the closure
-                         `(call ,tname ,@(map (lambda (v)
-                                                (let ((cv (assq v (cadr (lam:vinfo lam)))))
-                                                  (if cv
-                                                      `(call (top getfield) ,fname (inert ,v))
-                                                      v)))
-                                              cvs)))
-                        (iskw ;; TODO need more robust version of this
+                         (let* ((var-exprs (map (lambda (v)
+                                                  (let ((cv (assq v (cadr (lam:vinfo lam)))))
+                                                    (if cv
+                                                        `(call (top getfield) ,fname (inert ,v))
+                                                        v)))
+                                                cvs))
+                                (P (filter identity (map (lambda (v ve)
+                                                           (if (is-var-boxed? v lam)
+                                                               #f
+                                                               `(call (top typeof) ,ve)))
+                                                         cvs var-exprs))))
+                           `(new ,(if (null? P)
+                                      tname
+                                      `(call (top apply_type) ,tname ,@P))
+                                 ,@var-exprs)))
+                        (iskw ;; TODO jb/functions need more robust version of this
                          (contains (lambda (x) (eq? x 'kwftype)) sig)))
                    `(toplevel-butlast
                      ,@(if exists
