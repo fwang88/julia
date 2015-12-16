@@ -308,7 +308,7 @@ Void() = nothing
 
 Expr(args::ANY...) = _expr(args...)
 
-_new(typ::Symbol, argty::Symbol) = eval(:(call(::Type{$typ}, n::$argty) = $(Expr(:new, typ, :n))))
+_new(typ::Symbol, argty::Symbol) = eval(:((::Type{$typ})(n::$argty) = $(Expr(:new, typ, :n))))
 _new(:LabelNode, :Int)
 _new(:GotoNode, :Int)
 _new(:TopNode, :Symbol)
@@ -316,9 +316,9 @@ _new(:NewvarNode, :Symbol)
 _new(:QuoteNode, :ANY)
 _new(:GenSym, :Int)
 _new(:Box, :ANY)
-eval(:(call(::Type{Box}) = $(Expr(:new, :Box))))
-eval(:(call(::Type{LineNumberNode}, f::Symbol, l::Int) = $(Expr(:new, :LineNumberNode, :f, :l))))
-eval(:(call(::Type{GlobalRef}, m::Module, s::Symbol) = $(Expr(:new, :GlobalRef, :m, :s))))
+eval(:((::Type{Box})() = $(Expr(:new, :Box))))
+eval(:((::Type{LineNumberNode})(f::Symbol, l::Int) = $(Expr(:new, :LineNumberNode, :f, :l))))
+eval(:((::Type{GlobalRef})(m::Module, s::Symbol) = $(Expr(:new, :GlobalRef, :m, :s))))
 
 Module(name::Symbol=:anonymous, std_imports::Bool=true) = ccall(:jl_f_new_module, Any, (Any, Bool), name, std_imports)::Module
 

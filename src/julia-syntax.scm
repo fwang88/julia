@@ -305,9 +305,7 @@
            (error "function static parameter names not unique"))
        (if (any (lambda (x) (memq x names)) anames)
            (error "function argument and static parameter names must be distinct")))
-     ;; TODO jb/functions: this is currently broken by the code in closure-convert that
-     ;; puts a lowered method name expression back into a front-end AST
-     #;(if (not (sym-ref? name))
+     (if (and name (not (sym-ref? name)))
          (error (string "invalid method name \"" (deparse name) "\"")))
      (let* ((types (llist-types argl))
             (body  (method-lambda-expr argl body))
@@ -3037,15 +3035,22 @@ So far only the second case can actually occur.
                                       (cl-convert (cadddr lam2) 'anon lam2 (table) #f interp)))
                                   ,(last e))))
                        (else
-                        `(block
-                          ,@sp-inits
-                          (method ,name ,(cl-convert sig fname lam namemap toplevel interp)
-                                  ,(julia-expand-macros
-                                    `(quote
-                                      ,(to-goto-form
+                        (let* ((newlam (to-goto-form
                                         (renumber-jlgensym
-                                         (convert-lambda lam2 '|#anon| #t)))))
-                                  ,(last e)))))
+                                         (convert-lambda lam2 '|#anon| #t))))
+                               (vi (lam:vinfo newlam))
+                               ;; insert `list` expression heads to make the lambda vinfo
+                               ;; lists quotable
+                               (newlam `(lambda (list ,@(cadr newlam))
+                                          (list (list ,@(map (lambda (l) (cons 'list l))
+                                                             (car vi)))
+                                                (list ,@(cadr vi)) ,(caddr vi) (list ,@(cadddr vi)))
+                                          ,@(cdddr newlam))))
+                          `(block
+                            ,@sp-inits
+                            (method ,name ,(cl-convert sig fname lam namemap toplevel interp)
+                                    ,(julia-expand-macros `(quote ,newlam))
+                                    ,(last e))))))
                  ;; local case - lift to a new type at top level
                  (let* ((exists (get namemap name #f))
                         (tname  (or exists

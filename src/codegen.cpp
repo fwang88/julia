@@ -1749,13 +1749,6 @@ jl_value_t *jl_static_eval(jl_value_t *ex, void *ctx_, jl_module_t *mod,
                     return result;
                 }
             }
-        // The next part is probably valid, but it is untested
-        //} else if (e->head == tuple_sym) {
-        //  size_t i;
-        //  for (i = 0; i < jl_array_dim0(e->args); i++)
-        //        if (jl_static_eval(jl_exprarg(e,i),ctx,mod,sp,ast,sparams,allow_alloc) == NULL)
-        //          return NULL;
-        //  return ex;
         }
         return NULL;
     }

@@ -109,14 +109,10 @@ static jl_value_t *eval(jl_value_t *e, jl_value_t **locals, size_t nl, size_t ng
                 break;
             }
         }
-        if (i >= nl) {
+        if (i >= nl)
             v = jl_get_global(jl_current_module, (jl_sym_t*)e);
-        }
-        if (v == NULL) {
-            if ((jl_sym_t*)e == call_sym)     // TODO jb/functions
-                return jl_nothing;
+        if (v == NULL)
             jl_undefined_var_error((jl_sym_t*)e);
-        }
         return v;
     }
     if (jl_is_symbolnode(e)) {

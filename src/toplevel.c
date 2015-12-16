@@ -784,12 +784,8 @@ JL_DLLEXPORT void jl_method_def(jl_svec_t *argdata, jl_lambda_info_t *f, jl_valu
     JL_GC_PUSH1(&f);
 
     if (!jl_is_lambda_info(f)) {
-        jl_value_t *jl_macroexpand(jl_value_t *expr);
         assert(jl_is_expr(f) && ((jl_expr_t*)f)->head == lambda_sym);
-        // TODO jb/functions
-        // calling macroexpand is a hack to make sure the lambda info lists are
-        // correctly formatted by sending through julia_to_scm then scm_to_julia.
-        f = (jl_lambda_info_t*)jl_macroexpand((jl_value_t*)f);
+        f = jl_new_lambda_info((jl_value_t*)f, jl_emptysvec, jl_current_module);
     }
 
     assert(jl_is_lambda_info(f));

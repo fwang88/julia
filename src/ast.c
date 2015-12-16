@@ -301,14 +301,7 @@ static jl_value_t *scm_to_julia_(value_t e, int eo)
         if (issymbol(hd))
             sym = scmsym_to_julia(hd);
         else
-            sym = jl_symbol("list");
-        /* tree node types:
-           goto  gotoifnot  label  return
-           lambda  call  =  quote
-           null  top  method
-           body  file new
-           line  enter  leave
-        */
+            sym = list_sym;
         size_t n = llength(e)-1;
         size_t i;
         if (sym == lambda_sym) {
@@ -407,6 +400,8 @@ static jl_value_t *scm_to_julia_(value_t e, int eo)
             jl_cellset(ex->args, i, scm_to_julia_(car_(e),eo));
             e = cdr_(e);
         }
+        if (sym == list_sym)
+            return (jl_value_t*)ex->args;
         return (jl_value_t*)ex;
     }
     if (iscprim(e) && cp_class((cprim_t*)ptr(e))==wchartype) {
@@ -502,11 +497,7 @@ static value_t julia_to_scm_(jl_value_t *v)
             car_(args) = llist;
             fl_free_gc_handles(1);
         }
-        value_t scmv;
-        if (ex->head == jl_symbol("list"))
-            scmv = args;
-        else
-            scmv = fl_cons(hd, args);
+        value_t scmv = fl_cons(hd, args);
         fl_free_gc_handles(1);
         return scmv;
     }

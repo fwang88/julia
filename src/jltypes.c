@@ -3589,7 +3589,6 @@ void jl_init_types(void)
     compositetype_sym = jl_symbol("composite_type");
     type_goto_sym = jl_symbol("type_goto");
     toplevel_sym = jl_symbol("toplevel");
-    tuple_sym = jl_symbol("tuple");
     dot_sym = jl_symbol(".");
     boundscheck_sym = jl_symbol("boundscheck");
     fastmath_sym = jl_symbol("fastmath");
@@ -3598,8 +3597,8 @@ void jl_init_types(void)
     simdloop_sym = jl_symbol("simdloop");
     pure_sym = jl_symbol("pure");
     meta_sym = jl_symbol("meta");
-    arrow_sym = jl_symbol("->");
     dots_sym = jl_symbol("...");
+    list_sym = jl_symbol("list");
 }
 
 #ifdef __cplusplus
