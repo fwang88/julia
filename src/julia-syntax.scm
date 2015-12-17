@@ -901,30 +901,14 @@
                        ;; fill in first (closure) argument
                        (farg    (if (decl? name)
                                     name
-                                    (if (and (symbol? name)
-                                             ;; don't use function name for argument in staged
-                                             ;; functions, since we wouldn't want it to refer to
-                                             ;; the function's type.
-                                             (not isstaged)
-                                             ;; TODO jb/functions: better handle case where function name is
-                                             ;; overridden by a user argument name
-                                             (not (any (lambda (a)
-                                                         (and (not (and (decl? a) (length= a 2)))
-                                                              (not (and (pair? a) (eq? (car a) 'parameters)))
-                                                              (eq? (arg-name a) name)))
-                                                       argl)))
-                                        `(|::| ,name (call (|.| Core 'Typeof) ,name))
-                                        `(|::|       (call (|.| Core 'Typeof) ,name)))))
+                                    `(|::| (call (|.| Core 'Typeof) ,name))))
                        (argl    (fix-arglist
                                  (if (and (not (decl? name)) (eq? (undot-name name) 'call))
                                      argl
                                      (arglist-unshift argl farg))))
                        (name    (if (decl? name) #f name)))
                   (expand-binding-forms
-                   (method-def-expr name sparams
-                                    argl
-                                    (caddr e)
-                                    isstaged))))
+                   (method-def-expr name sparams argl (caddr e) isstaged))))
                (else e))))
 
       ((->)
@@ -2972,11 +2956,12 @@ So far only the second case can actually occur.
                   (sig      (and sig (if (eq? (car sig) 'block)
                                          (last sig)
                                          sig))))
-             (if (and local? (expr-contains-p (lambda (x)
-                                                (and (assignment? x) (eq? (cadr x) name)))
-                                              (lam:body lam)))
-                 ;; TODO jb/functions better error message here
-                 (error (string "assignment to local function " name)))
+             (if local?
+                 (begin (if (memq name (lam:args lam))
+                            (error (string "cannot add method to function argument " name)))
+                        (if (expr-contains-p (lambda (x) (and (assignment? x) (eq? (cadr x) name)))
+                                             (lam:body lam))
+                            (error (string "assignment to local function " name)))))
              (if (not local?) ;; not a local function; will not be closure converted to a new type
                  (cond (short e)
                        ((null? cvs)
